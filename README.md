@@ -1,7 +1,7 @@
 # VoiceFlow
 
 <p align="center">
-  <img src="media/hero.png" alt="VoiceFlow Hero" width="100%">
+  <img src="media/dashboard.png" alt="VoiceFlow Dashboard" width="100%">
 </p>
 
 # Own your Voice.
@@ -31,10 +31,6 @@ VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak
 
 Cloud dictation services charge monthly fees while harvesting your voice data. VoiceFlow is free, fully local, and yours forever.
 
-<p align="center">
-  <img src="media/comparison.png" alt="Comparison" width="100%">
-</p>
-
 | Feature | VoiceFlow | Cloud Services |
 | :--- | :---: | :---: |
 | **Cost** | **$0.00** | $10-15/mo |
@@ -60,10 +56,6 @@ Everything runs on localhost. Your microphone data never leaves your RAM. We can
 
 No hidden processes, no cloud uploads. Just transparent, local AI at every step.
 
-<p align="center">
-  <img src="media/how-it-works.png" alt="How It Works" width="100%">
-</p>
-
 #### 1. Ready
 VoiceFlow waits silently in your system tray. A minimal popup indicates recording status.
 
@@ -73,8 +65,16 @@ Activate with your hotkey and speak naturally. Audio stays in RAM only—the int
 #### 3. Transcribe & Paste
 Release the hotkey. Local AI processes your audio instantly, then auto-pastes text at your cursor.
 
+The dashboard shown above is your live dictation log — today's words and entries appear inline next to lifetime totals, with your active model, language, microphone, and compute device on display.
+
+---
+
+### Guided Setup
+
+A seven-step setup picks the right microphone, compute device, and model for your hardware — no manual configuration. Dark mode by default; light and system themes are one click away.
+
 <p align="center">
-  <img src="media/app-dash.png" alt="VoiceFlow Dashboard" width="100%">
+  <img src="media/onboarding.png" alt="VoiceFlow Onboarding" width="100%">
 </p>
 
 ---
@@ -83,10 +83,6 @@ Release the hotkey. Local AI processes your audio instantly, then auto-pastes te
 
 Configure your preferred keyboard shortcuts with two recording modes to match your workflow.
 
-<p align="center">
-  <img src="media/hotkeys.png" alt="Custom Hotkeys" width="100%">
-</p>
-
 *   **Hold Mode**: Hold to record, release to transcribe. Perfect for quick dictation bursts.
 *   **Toggle Mode**: Press once to start, press again to stop. Ideal for longer recordings.
 
@@ -94,7 +90,11 @@ Configure your preferred keyboard shortcuts with two recording modes to match yo
 
 ### Neural Engine
 
-Choose from 16+ Whisper models optimized for different use cases.
+Choose from 16+ Whisper models optimized for different use cases. Each option shows speed, accuracy, parameter count, and disk footprint so you can pick what your hardware can comfortably run.
+
+<p align="center">
+  <img src="media/model-picker.png" alt="Model Picker" width="100%">
+</p>
 
 #### Model Categories
 *   **Standard** (Tiny → Large-v3): From 75MB to 3GB. Balance speed and accuracy for your hardware.
@@ -113,12 +113,6 @@ Choose from 16+ Whisper models optimized for different use cases.
 ### Ready to go local?
 
 Take back control of your voice data. Open source and forever free.
-
-<p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe">
-    <img src="media/footer.png" alt="Download Now" width="100%">
-  </a>
-</p>
 
 ### [Download Installer v1.3.1 (Windows)](https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe)
 

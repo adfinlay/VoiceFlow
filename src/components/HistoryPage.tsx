@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
-import { Search, Copy, Trash2, CalendarDays, Clock, Mic, FileAudio } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, Copy, Trash2, FileAudio, X } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { base64ToBlobUrl, revokeUrl, isInvalidAudioPayload } from "@/lib/audio";
+import {
+  base64ToBlobUrl,
+  revokeUrl,
+  isInvalidAudioPayload,
+} from "@/lib/audio";
 import {
   Dialog,
   DialogContent,
@@ -15,33 +15,44 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import type { HistoryEntry } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export function HistoryPage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioMeta, setAudioMeta] = useState<{ fileName?: string; mime?: string; durationMs?: number } | null>(null);
+  const [audioMeta, setAudioMeta] = useState<{
+    fileName?: string;
+    mime?: string;
+    durationMs?: number;
+  } | null>(null);
   const [loadingAudioFor, setLoadingAudioFor] = useState<number | null>(null);
 
-  // Reusing the same load logic as HomePage for consistency
-  const loadHistory = async (searchQuery?: string) => {
-    setLoading(true);
+  const loadHistory = async (searchQuery?: string, isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else setSearching(true);
     try {
-      // Fetch 100 items by default for the full page view
-      const data = await api.getHistory(100, 0, searchQuery || undefined, false);
+      const data = await api.getHistory(
+        100,
+        0,
+        searchQuery || undefined,
+        false
+      );
       setHistory(data);
     } catch (error) {
       console.error("Failed to load history:", error);
       toast.error("Failed to load history");
     } finally {
       setLoading(false);
+      setSearching(false);
     }
   };
 
   useEffect(() => {
-    loadHistory();
+    loadHistory(undefined, true);
   }, []);
 
   useEffect(() => {
@@ -49,11 +60,10 @@ export function HistoryPage() {
       loadHistory(search);
     }, 500);
     return () => clearTimeout(debounce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  useEffect(() => {
-    return () => revokeUrl(audioUrl);
-  }, [audioUrl]);
+  useEffect(() => () => revokeUrl(audioUrl), [audioUrl]);
 
   const handleCopy = async (text: string) => {
     try {
@@ -74,8 +84,8 @@ export function HistoryPage() {
       await api.deleteHistory(id);
       setHistory((prev) => prev.filter((h) => h.id !== id));
       toast.success("Transcription deleted");
-    } catch (error) {
-      console.error("Failed to delete:", error);
+    } catch (err) {
+      console.error("Failed to delete:", err);
       toast.error("Failed to delete transcription");
     }
   };
@@ -93,9 +103,13 @@ export function HistoryPage() {
         durationMs: response.durationMs,
       });
       setShowPlayer(true);
-    } catch (error) {
-      console.error("Failed to load audio recording:", error);
-      toast.error(isInvalidAudioPayload(error) ? "Audio file is corrupted" : "Audio file not found");
+    } catch (err) {
+      console.error("Failed to load audio recording:", err);
+      toast.error(
+        isInvalidAudioPayload(err)
+          ? "Audio file is corrupted"
+          : "Audio file not found"
+      );
       revokeUrl(audioUrl);
       setAudioUrl(null);
       setShowPlayer(false);
@@ -105,170 +119,67 @@ export function HistoryPage() {
     }
   };
 
-  const groupedHistory = groupByDate(history);
+  const groupedHistory = useMemo(() => groupByDate(history), [history]);
+  const groupedKeys = Object.keys(groupedHistory);
+  const hasResults = groupedKeys.length > 0;
+  const totalEntries = history.length;
   const durationMs = audioMeta?.durationMs;
 
   return (
     <>
-    <div className="min-h-screen w-full bg-background/50 relative overflow-x-hidden">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-20 pointer-events-none overflow-hidden" />
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-secondary w-[450px] h-[450px] absolute -top-40 -left-40 opacity-15" />
-        <div className="orb orb-primary w-[350px] h-[350px] absolute bottom-20 -right-40 opacity-20" />
-      </div>
-
-      <div className="w-full max-w-[1600px] mx-auto p-6 md:p-10 space-y-10 relative z-10">
-
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground mb-2">
-              Full History
-            </h1>
-            <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
-              A complete archive of your voice notes and dictations.
+      <div className="min-h-full w-full bg-background">
+        <div className="w-full max-w-5xl mx-auto px-6 md:px-10 py-10 md:py-16 space-y-10">
+          <header className="space-y-3 min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              archive
+              <span className="text-cream-muted/30 mx-2">·</span>
+              <span className="text-cream-muted/40">
+                {totalEntries.toLocaleString()}{" "}
+                {totalEntries === 1 ? "entry" : "entries"}
+              </span>
             </p>
-          </div>
-          
-          <div className="w-full md:w-[400px] relative group">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-             <Input 
-               placeholder="Search archive..." 
-               className="pl-10 h-11 w-full bg-background/50 border-border/50 focus:bg-background transition-all shadow-sm"
-               value={search}
-               onChange={(e) => setSearch(e.target.value)}
-             />
-          </div>
-        </div>
+            <h1 className="font-display text-4xl md:text-5xl font-medium tracking-tight text-cream leading-[1.05]">
+              History
+            </h1>
+            <p className="text-sm text-cream-muted max-w-xl leading-relaxed">
+              A complete log of everything you've dictated. Search runs against
+              the database — results update as you type.
+            </p>
+          </header>
 
-        {/* Content */}
-        <section className="min-h-[500px]">
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            searching={searching}
+          />
+
           {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-               {[...Array(12)].map((_, i) => (
-                 <div key={i} className="h-48 rounded-xl bg-secondary/20 animate-pulse" />
-               ))}
-            </div>
-          ) : Object.keys(groupedHistory).length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-32 text-center space-y-6 border border-dashed border-border/50 rounded-3xl bg-secondary/5">
-               <div className="relative">
-                 <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center">
-                   <Mic className="w-12 h-12 text-primary/40" />
-                 </div>
-                 <div className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
-                   <Search className="w-4 h-4 text-muted-foreground/50" />
-                 </div>
-               </div>
-               <div className="space-y-1">
-                 <p className="text-xl font-medium text-foreground">
-                    {search ? "No matching results" : "Archive is empty"}
-                 </p>
-                 <p className="text-muted-foreground">
-                   {search ? "Try searching for simpler keywords." : "Everything you transcribe will be saved here."}
-                 </p>
-               </div>
-            </div>
+            <LogSkeleton />
+          ) : !hasResults ? (
+            <LogEmpty searchQuery={search} />
           ) : (
-            <div className="space-y-12">
+            <div className="space-y-10">
               {Object.entries(groupedHistory).map(([dateLabel, entries]) => (
-                <div key={dateLabel} className="space-y-4">
-                  <div className="flex items-center gap-3 sticky top-0 z-10 bg-background/95 backdrop-blur py-3 text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                    <CalendarDays className="w-4 h-4 text-primary" />
-                    <h3>{dateLabel}</h3>
-                    <div className="h-px flex-1 bg-border/40" />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {entries.map((entry) => {
-                      const hasAudio = !!entry.has_audio;
-                      return (
-                        <Card
-                          key={entry.id}
-                          className="group flex flex-col justify-between h-full bg-card/60 backdrop-blur-sm border-border/50 hover:bg-card hover:border-primary/20 transition-colors duration-150"
-                        >
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-1 rounded flex items-center gap-1.5">
-                                <Clock className="w-3 h-3" />
-                                {formatTime(entry.created_at)}
-                              </span>
-                              {hasAudio && (
-                                <Badge variant="secondary" className="text-[11px] flex items-center gap-1">
-                                  <FileAudio className="w-3 h-3" />
-                                  Audio
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                onClick={() => handleCopy(entry.text)}
-                                aria-label="Copy transcription"
-                              >
-                                <Copy className="h-3.5 w-3.5" />
-                              </Button>
-                              {hasAudio && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                  onClick={() => handlePlayAudio(entry.id)}
-                                  disabled={loadingAudioFor === entry.id}
-                                  aria-label="Play audio recording"
-                                >
-                                  <FileAudio className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => handleDelete(entry.id)}
-                                aria-label="Delete transcription"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pt-2 flex-grow">
-                            <p className="text-base leading-relaxed line-clamp-6 font-medium text-foreground/90 group-hover:text-foreground transition-colors">
-                              {entry.text}
-                            </p>
-                          </CardContent>
-                          <div className="px-6 pb-4 pt-0 mt-auto flex items-center justify-between">
-                             <div className="text-[10px] uppercase tracking-wider font-semibold text-primary/40 group-hover:text-primary/80 transition-colors">
-                                {entry.word_count} words
-                             </div>
-                             {hasAudio && (
-                               <Button
-                                 variant="ghost"
-                                 size="sm"
-                                 className="h-6 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10 transition-colors"
-                                 onClick={() => handlePlayAudio(entry.id)}
-                                 disabled={loadingAudioFor === entry.id}
-                               >
-                                 <FileAudio className="w-3 h-3 mr-1" />
-                                 {loadingAudioFor === entry.id ? "Loading..." : "Play"}
-                               </Button>
-                             )}
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                </div>
+                <LogSection
+                  key={dateLabel}
+                  label={dateLabel}
+                  entries={entries}
+                  onCopy={handleCopy}
+                  onDelete={handleDelete}
+                  onPlayAudio={handlePlayAudio}
+                  loadingAudioFor={loadingAudioFor}
+                />
               ))}
             </div>
           )}
-        </section>
+        </div>
       </div>
-    </div>
 
-      <Dialog
+      <AudioPlayerDialog
         open={showPlayer}
+        audioUrl={audioUrl}
+        audioMeta={audioMeta}
+        durationMs={durationMs}
         onOpenChange={(open) => {
           setShowPlayer(open);
           if (!open) {
@@ -277,39 +188,297 @@ export function HistoryPage() {
             setAudioMeta(null);
           }
         }}
-      >
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Audio Recording</DialogTitle>
-          <DialogDescription>Playback of the recorded audio for this transcription</DialogDescription>
+      />
+    </>
+  );
+}
+
+function SearchBar({
+  value,
+  onChange,
+  searching,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  searching: boolean;
+}) {
+  const hasQuery = value.length > 0;
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      <div className="relative flex-1 max-w-md min-w-[240px]">
+        <Search
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-cream-muted/60 pointer-events-none"
+          strokeWidth={2}
+        />
+        <input
+          type="search"
+          placeholder="Search the archive"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full h-10 pl-9 pr-9 bg-secondary/30 border border-border rounded-md text-sm text-cream placeholder:text-cream-muted/50 focus:bg-secondary/50 focus:border-accent-500/40 focus:outline-none transition-colors"
+        />
+        {hasQuery && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-cream-muted/60 hover:text-cream p-1 rounded transition-colors"
+            aria-label="Clear search"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {searching && (
+        <span className="font-mono text-[11px] uppercase tracking-widest text-cream-muted/60">
+          searching…
+        </span>
+      )}
+    </div>
+  );
+}
+
+function LogSection({
+  label,
+  entries,
+  onCopy,
+  onDelete,
+  onPlayAudio,
+  loadingAudioFor,
+}: {
+  label: string;
+  entries: HistoryEntry[];
+  onCopy: (text: string) => void;
+  onDelete: (id: number) => void;
+  onPlayAudio: (id: number) => void;
+  loadingAudioFor: number | null;
+}) {
+  return (
+    <section>
+      <div className="flex items-center gap-3 mb-2 sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-2 -mx-2 px-2">
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 whitespace-nowrap">
+          {label}
+          <span className="text-cream-muted/30 mx-2">·</span>
+          <span className="text-cream-muted/40">
+            {entries.length} {entries.length === 1 ? "entry" : "entries"}
+          </span>
+        </p>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+      <div>
+        {entries.map((entry) => (
+          <LogRow
+            key={entry.id}
+            entry={entry}
+            onCopy={onCopy}
+            onDelete={onDelete}
+            onPlayAudio={onPlayAudio}
+            isLoadingAudio={loadingAudioFor === entry.id}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LogRow({
+  entry,
+  onCopy,
+  onDelete,
+  onPlayAudio,
+  isLoadingAudio,
+}: {
+  entry: HistoryEntry;
+  onCopy: (text: string) => void;
+  onDelete: (id: number) => void;
+  onPlayAudio: (id: number) => void;
+  isLoadingAudio: boolean;
+}) {
+  const hasAudio = !!entry.has_audio;
+  return (
+    <article className="group relative flex items-start gap-5 py-4 border-t border-border first:border-t-0 transition-colors hover:bg-secondary/[0.25] -mx-2 px-2 rounded-sm">
+      <div className="flex flex-col items-end gap-1.5 w-14 flex-shrink-0 pt-0.5">
+        <span className="font-mono text-[11px] text-cream-muted/70 leading-none">
+          {formatTime(entry.created_at)}
+        </span>
+        {hasAudio && (
+          <span
+            className="font-mono text-[9px] uppercase tracking-[0.15em] text-accent-500/80 flex items-center gap-1 leading-none"
+            title="Audio recording attached"
+          >
+            <FileAudio className="w-2.5 h-2.5" strokeWidth={2.5} />
+            audio
+          </span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm leading-relaxed text-cream/90 line-clamp-4 group-hover:text-cream transition-colors break-words">
+          {entry.text}
+        </p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream-muted/50 mt-2">
+          {entry.word_count} {entry.word_count === 1 ? "word" : "words"}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+        <RowAction
+          icon={Copy}
+          label="Copy"
+          onClick={() => onCopy(entry.text)}
+        />
+        {hasAudio && (
+          <RowAction
+            icon={FileAudio}
+            label={isLoadingAudio ? "Loading…" : "Play audio"}
+            onClick={() => onPlayAudio(entry.id)}
+            disabled={isLoadingAudio}
+          />
+        )}
+        <RowAction
+          icon={Trash2}
+          label="Delete"
+          tone="danger"
+          onClick={() => onDelete(entry.id)}
+        />
+      </div>
+    </article>
+  );
+}
+
+function RowAction({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  tone = "default",
+}: {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "h-8 w-8 rounded-md flex items-center justify-center transition-colors",
+        "text-cream-muted/70 hover:bg-secondary/60",
+        tone === "danger"
+          ? "hover:text-destructive hover:bg-destructive/10"
+          : "hover:text-cream",
+        "disabled:opacity-40 disabled:cursor-not-allowed"
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" strokeWidth={2} />
+    </button>
+  );
+}
+
+function LogEmpty({ searchQuery }: { searchQuery: string }) {
+  return (
+    <div className="border border-dashed border-border rounded-md py-20 px-6 text-center space-y-3">
+      <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-cream-muted/60">
+        {searchQuery ? "no matches" : "archive empty"}
+      </p>
+      <p className="text-sm text-cream-muted">
+        {searchQuery
+          ? `Nothing in the archive matches "${searchQuery}".`
+          : "Everything you transcribe will be saved here."}
+      </p>
+      {searchQuery && (
+        <p className="font-mono text-xs text-cream-muted/60 pt-2">
+          <span className="text-cream-muted/40">→ </span>
+          try simpler keywords or clear the search
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LogSkeleton() {
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="h-2 w-32 bg-secondary/50 rounded animate-pulse" />
+        <div className="flex-1 h-px bg-border" />
+      </div>
+      <div>
+        {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+          <div
+            key={i}
+            className="flex items-start gap-5 py-4 border-t border-border first:border-t-0"
+          >
+            <div className="w-14 flex-shrink-0 flex justify-end">
+              <div className="h-2.5 w-9 bg-secondary/50 rounded animate-pulse" />
+            </div>
+            <div className="flex-1 space-y-2">
+              <div className="h-3 bg-secondary/40 rounded animate-pulse" />
+              <div
+                className="h-3 bg-secondary/40 rounded animate-pulse"
+                style={{ width: `${50 + ((i * 13) % 40)}%` }}
+              />
+              <div className="h-2 w-16 bg-secondary/30 rounded animate-pulse mt-1" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AudioPlayerDialog({
+  open,
+  audioUrl,
+  audioMeta,
+  durationMs,
+  onOpenChange,
+}: {
+  open: boolean;
+  audioUrl: string | null;
+  audioMeta: { fileName?: string; mime?: string; durationMs?: number } | null;
+  durationMs?: number;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+            audio playback
+          </p>
+          <DialogTitle className="font-display text-xl font-medium tracking-tight text-cream truncate">
+            {audioMeta?.fileName || "Recording"}
+          </DialogTitle>
+          <DialogDescription className="font-mono text-xs text-cream-muted">
+            {durationMs
+              ? `${Math.round(durationMs / 1000)}s · ${audioMeta?.mime || "audio/wav"}`
+              : "Playback of the recorded audio"}
+          </DialogDescription>
         </DialogHeader>
         {audioUrl ? (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <FileAudio className="w-4 h-4 text-primary" />
-                <span>{audioMeta?.fileName || "history_audio.wav"}</span>
-              </div>
-              {durationMs ? <span>{Math.round(durationMs / 1000)}s</span> : null}
-            </div>
-            {/* biome-ignore lint/a11y/useMediaCaption: transcript text is already displayed in the history card */}
-            <audio controls autoPlay className="w-full">
-              <source src={audioUrl} type={audioMeta?.mime || "audio/wav"} />
-              Your browser does not support audio playback.
-            </audio>
-          </div>
+          // biome-ignore lint/a11y/useMediaCaption: transcript text is shown in the log
+          <audio controls autoPlay className="w-full">
+            <source src={audioUrl} type={audioMeta?.mime || "audio/wav"} />
+            Your browser does not support audio playback.
+          </audio>
         ) : (
-          <p className="text-sm text-muted-foreground">No audio loaded.</p>
+          <p className="text-sm text-cream-muted">No audio loaded.</p>
         )}
       </DialogContent>
     </Dialog>
-    </>
   );
 }
 
 function formatTime(isoString: string): string {
   const date = new Date(isoString);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function groupByDate(entries: HistoryEntry[]): Record<string, HistoryEntry[]> {
@@ -323,16 +492,18 @@ function groupByDate(entries: HistoryEntry[]): Record<string, HistoryEntry[]> {
     let label: string;
 
     if (isSameDay(entryDate, today)) {
-      label = "Today";
+      label = "today";
     } else if (isSameDay(entryDate, yesterday)) {
-      label = "Yesterday";
+      label = "yesterday";
     } else {
-      label = entryDate.toLocaleDateString([], { weekday: 'long', month: "long", day: "numeric" });
+      label = entryDate.toLocaleDateString([], {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      });
     }
 
-    if (!groups[label]) {
-      groups[label] = [];
-    }
+    if (!groups[label]) groups[label] = [];
     groups[label].push(entry);
   }
 
