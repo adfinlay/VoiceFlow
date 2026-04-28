@@ -1,5 +1,9 @@
 # VoiceFlow
 
+> Open-source, offline voice-to-text dictation for **Windows, Linux, and macOS**. Hold a hotkey, speak, and your words are pasted at the cursor — powered by Whisper, fully local, no cloud, no subscription.
+
+**Website:** [get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · **Source:** [github.com/infiniV/VoiceFlow](https://github.com/infiniV/VoiceFlow)
+
 <p align="center">
   <img src="media/dashboard.png" alt="VoiceFlow Dashboard" width="100%">
 </p>
@@ -10,15 +14,18 @@
 
 VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak is processed entirely on your hardware—your voice data never leaves your device. Built for privacy-conscious professionals who demand speed and reliability.
 
-> **New: Linux Support (Experimental)**
-> VoiceFlow now runs on Linux with Wayland-native input, evdev hotkeys, and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/tag/v1.3.2)
+> **Linux Support**
+> VoiceFlow runs natively on Linux with Wayland & X11 support, evdev hotkeys, CUDA GPU acceleration (with CPU fallback), and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/latest)
 
 <p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe">
-    <img src="https://img.shields.io/badge/Download_for_Windows-000000?style=for-the-badge&logo=windows&logoColor=white" alt="Download">
+  <a href="https://get-voice-flow.vercel.app/">
+    <img src="https://img.shields.io/badge/Visit_Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website">
   </a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.3.2">
-    <img src="https://img.shields.io/badge/Download_for_Linux_(Experimental)-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux">
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
+    <img src="https://img.shields.io/badge/Download_for_Windows-000000?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows">
+  </a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
+    <img src="https://img.shields.io/badge/Download_for_Linux-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux">
   </a>
   <a href="https://github.com/infiniV/VoiceFlow">
     <img src="https://img.shields.io/badge/View_Source-000000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
@@ -114,9 +121,9 @@ Choose from 16+ Whisper models optimized for different use cases. Each option sh
 
 Take back control of your voice data. Open source and forever free.
 
-### [Download Installer v1.3.1 (Windows)](https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe)
+### [Visit get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · [Download latest release](https://github.com/infiniV/VoiceFlow/releases/latest)
 
-*Windows 10/11 • 64-bit • ~150MB*
+*Windows 10/11 (.exe) • Linux (.AppImage / .tar.gz) • 64-bit*
 
 <br>
 <br>

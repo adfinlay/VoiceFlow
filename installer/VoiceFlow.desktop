@@ -1,10 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=VoiceFlow
-Comment=Voice-to-text paste utility
+GenericName=Voice Dictation
+Comment=Offline voice-to-text dictation. Hold hotkey, speak, paste. Private, local Whisper.
 Exec=VoiceFlow
 Icon=voiceflow
-Categories=AudioVideo;Audio;Utility;
+Categories=Utility;AudioVideo;Audio;Office;
+Keywords=voice;dictation;speech;transcription;whisper;stt;voice-to-text;offline;wayland;
 Terminal=false
 StartupNotify=true
 StartupWMClass=VoiceFlow

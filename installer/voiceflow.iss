@@ -3,8 +3,10 @@
 
 #define MyAppName "VoiceFlow"
 #define MyAppVersion "1.5.0"
-#define MyAppPublisher "VoiceFlow"
-#define MyAppURL "https://github.com/your-repo/voiceflow"
+#define MyAppPublisher "infiniV"
+#define MyAppURL "https://get-voice-flow.vercel.app/"
+#define MyAppSupportURL "https://github.com/infiniV/VoiceFlow/issues"
+#define MyAppUpdatesURL "https://github.com/infiniV/VoiceFlow/releases"
 #define MyAppExeName "VoiceFlow.exe"
 
 [Setup]
@@ -14,8 +16,8 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}
-AppUpdatesURL={#MyAppURL}
+AppSupportURL={#MyAppSupportURL}
+AppUpdatesURL={#MyAppUpdatesURL}
 
 ; Installation settings
 DefaultDirName={autopf}\{#MyAppName}
