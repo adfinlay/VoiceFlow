@@ -223,7 +223,10 @@ export function SettingsTab() {
   }, []);
 
   const validateHotkey = useCallback(
-    async (hotkey: string, excludeField: "holdHotkey" | "toggleHotkey") => {
+    async (
+      hotkey: string,
+      excludeField: "holdHotkey" | "toggleHotkey"
+    ): Promise<{ valid: boolean; error: string | null }> => {
       try {
         const result = await api.validateHotkey(hotkey, excludeField);
         return { valid: result.valid, error: result.error };
@@ -943,7 +946,7 @@ function HotkeysPanel({
   onValidate: (
     hotkey: string,
     exclude: "holdHotkey" | "toggleHotkey"
-  ) => Promise<{ valid: boolean; error?: string }>;
+  ) => Promise<{ valid: boolean; error: string | null }>;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -988,7 +991,7 @@ function HotkeyMode({
   hotkey: string;
   onToggle: (v: boolean) => void;
   onChange: (h: string) => void;
-  onValidate: (h: string) => Promise<{ valid: boolean; error?: string }>;
+  onValidate: (h: string) => Promise<{ valid: boolean; error: string | null }>;
 }) {
   return (
     <div
