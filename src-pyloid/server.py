@@ -289,6 +289,27 @@ async def stop_test_recording():
 
 
 @server.method()
+async def manual_toggle_recording():
+    """Toggle recording from a dashboard button - same flow as the hotkey."""
+    controller = get_controller()
+    return controller.manual_toggle_recording()
+
+
+@server.method()
+async def get_recording_state():
+    """Return the current recording state for UI sync."""
+    controller = get_controller()
+    return controller.get_recording_state()
+
+
+@server.method()
+async def get_hotkey_status():
+    """Return hotkey availability status (e.g. evdev permission errors)."""
+    controller = get_controller()
+    return controller.hotkey_service.get_status()
+
+
+@server.method()
 async def open_data_folder():
     """Open the application data folder."""
     controller = get_controller()
@@ -298,32 +319,44 @@ async def open_data_folder():
 
 @server.method()
 async def open_external_url(url: str):
-    """Open a URL in the system's default browser."""
-    import webbrowser
+    """Open a URL in the system's default browser.
+
+    Uses Qt's QDesktopServices first since it routes through the proper
+    desktop integration (xdg-open / kde-open / gio open / Cocoa /
+    ShellExecute) and is non-blocking. Falls back to platform-native
+    spawn-and-forget commands, then to the webbrowser module.
+    """
     import sys
     import subprocess
+    import webbrowser
 
     log.info("Opening external URL", url=url)
 
+    # Preferred: Qt's QDesktopServices.openUrl - delegates to the right
+    # platform handler and returns immediately. Avoids the subprocess.run
+    # check=True trap on KDE where xdg-open forks to kde-open5 and exits 4.
     try:
-        # On Windows, os.startfile is more reliable than webbrowser in packaged apps
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        if QDesktopServices.openUrl(QUrl(url)):
+            return {"success": True}
+    except Exception as e:
+        log.warning("QDesktopServices failed, falling back", error=str(e))
+
+    try:
         if sys.platform == 'win32':
             import os
             os.startfile(url)
         elif sys.platform == 'darwin':
-            # macOS
-            subprocess.run(['open', url], check=True)
+            subprocess.Popen(['open', url])
         else:
-            # Linux and other platforms - try xdg-open first, fallback to webbrowser
-            try:
-                subprocess.run(['xdg-open', url], check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                webbrowser.open(url)
-
+            # Popen + no check=True: spawn xdg-open and don't block on exit
+            # status. xdg-open often forks helpers that return non-zero even
+            # on successful handoff (especially under KDE Plasma).
+            subprocess.Popen(['xdg-open', url])
         return {"success": True}
     except Exception as e:
         log.error("Failed to open external URL", url=url, error=str(e))
-        # Fallback to webbrowser module
         try:
             webbrowser.open(url)
             return {"success": True}
@@ -393,6 +426,38 @@ async def get_model_info(model_name: str):
         "sizeBytes": info.size_bytes,
         "cached": info.cached
     }
+
+
+@server.method()
+async def get_model_cache_dir():
+    """Return the resolved model cache directory path."""
+    manager = get_model_manager()
+    return {"path": manager.get_cache_dir()}
+
+
+@server.method()
+async def open_model_cache_dir():
+    """Open the model cache directory in the system file manager."""
+    import sys
+    import subprocess
+    from pathlib import Path
+
+    manager = get_model_manager()
+    path = manager.get_cache_dir()
+    Path(path).mkdir(parents=True, exist_ok=True)
+    log.info("Opening model cache folder", path=path)
+    try:
+        if sys.platform == 'win32':
+            import os
+            os.startfile(path)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
+        return {"success": True, "path": path}
+    except Exception as e:
+        log.error("Failed to open model cache folder", error=str(e))
+        return {"success": False, "error": str(e), "path": path}
 
 
 @server.method()

@@ -201,6 +201,14 @@ class ModelManager:
         """Get list of all supported model names."""
         return list(MODEL_SIZES.keys())
 
+    def get_cache_dir(self) -> str:
+        """Return the resolved HuggingFace hub cache directory path."""
+        try:
+            from huggingface_hub.constants import HF_HUB_CACHE
+            return str(Path(HF_HUB_CACHE).resolve())
+        except Exception:
+            return str((Path.home() / ".cache" / "huggingface" / "hub").resolve())
+
     def is_model_cached(self, model_name: str) -> bool:
         """
         Check if a model is already downloaded and cached.
@@ -326,6 +334,11 @@ class ModelManager:
                 # Use actual byte progress from tqdm
                 actual_bytes = progress_state["bytes_downloaded"]
                 actual_total = progress_state["bytes_total"]
+                # bytes_downloaded counts every chunk including small metadata
+                # files that aren't always reflected in bytes_total. Cap to
+                # avoid >100% drift before the file-count bar catches up.
+                if actual_bytes > actual_total:
+                    actual_bytes = actual_total
                 percent = (actual_bytes / actual_total) * 100
             elif progress_state["files_total"] > 0:
                 # Fall back to file-based progress estimation
@@ -353,19 +366,33 @@ class ModelManager:
             except Exception as e:
                 log.warning("Progress callback error", error=str(e))
 
-        # Custom tqdm class that tracks download progress
-        # NOTE: huggingface_hub only uses tqdm_class for file-level progress,
-        # not for individual file byte downloads (see https://github.com/huggingface/huggingface_hub/issues/1110)
+        # Custom tqdm class that tracks download progress.
+        #
+        # huggingface_hub uses tqdm_class for two bars: a shared bytes_progress
+        # bar (unit="B") that aggregates per-file chunk updates, and a
+        # thread_map outer bar (unit="it") for file-count progress.
+        #
+        # IMPORTANT: tqdm with disable=None auto-disables when stderr isn't a
+        # TTY (which is the case in packaged GUI builds). When disabled, tqdm
+        # silently drops self.n increments and self.unit, so our previous
+        # implementation never reported byte progress for big-file downloads.
+        # That made multi-GB models look frozen at single-digit % until the
+        # first/last file boundary, which users perceive as "won't download".
+        # Fix: track bytes ourselves via _vf_n and remember the unit kwarg
+        # before super().__init__ can clobber it. Force disable=False so
+        # tqdm doesn't no-op our updates either.
         class DownloadProgressBar(tqdm_base):
             def __init__(self, *args, **kwargs):
-                # Filter out any unexpected kwargs that tqdm doesn't accept
                 kwargs.pop('name', None)
-                # CRITICAL: Redirect tqdm output to dummy stream to prevent crash in windowed apps
-                # When packaged with PyInstaller --windowed, sys.stderr is None
-                # which causes "'NoneType' object has no attribute 'write'" error
-                # We track progress via callbacks, so tqdm console output is not needed
+                # Stash unit before super init - tqdm with disable=True drops it
+                self._vf_unit = kwargs.get('unit', 'it')
+                # Force enabled so super().update() actually runs
+                kwargs['disable'] = False
+                # Redirect tqdm console writes to dummy buffer; sys.stderr can
+                # be None in pyinstaller --windowed builds.
                 kwargs['file'] = io.StringIO()
                 super().__init__(*args, **kwargs)
+                self._vf_n = 0
 
             def update(self, n=1):
                 # Check for cancellation - raise exception to abort download
@@ -373,22 +400,24 @@ class ModelManager:
                     raise DownloadCancelledError("Download cancelled by user")
 
                 super().update(n)
-                unit = getattr(self, 'unit', 'unknown')
-                total = getattr(self, 'total', 0)
-                current_n = getattr(self, 'n', 0)
+                if n <= 0:
+                    return
 
-                # Track file completion progress (unit='it' for iterations)
-                if unit == 'it' and n > 0:
+                self._vf_n += n
+                # self.total is read live - hf_hub keeps incrementing the
+                # bytes bar's total as new files are queued.
+                total = getattr(self, 'total', 0) or 0
+
+                if 'B' in self._vf_unit:
+                    # Byte-level progress (the meaningful one for big models)
+                    progress_state["bytes_total"] = total
+                    progress_state["bytes_downloaded"] = self._vf_n
+                    send_progress()
+                else:
+                    # File-count progress (fallback when bytes bar is silent)
                     if progress_state["files_total"] == 0 and total > 0:
                         progress_state["files_total"] = total
-                    progress_state["files_done"] = current_n
-                    send_progress()
-
-                # Track byte-based progress from individual file downloads
-                if n > 0 and unit and 'B' in str(unit):
-                    if total > 0 and progress_state["bytes_total"] == 0:
-                        progress_state["bytes_total"] = total
-                    progress_state["bytes_downloaded"] = current_n
+                    progress_state["files_done"] = self._vf_n
                     send_progress()
 
         def download_thread():

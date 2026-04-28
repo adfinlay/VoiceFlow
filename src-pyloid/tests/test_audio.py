@@ -61,8 +61,14 @@ class TestAudioService:
         service.stop_recording()
 
     def test_sample_rate_is_16khz(self):
-        """Audio is recorded at 16kHz for Whisper compatibility."""
-        assert AudioService.SAMPLE_RATE == 16000
+        """Audio is recorded at 16kHz for Whisper compatibility.
+
+        Renamed to TARGET_SAMPLE_RATE in fix d5ecc49 when the audio service
+        gained a fallback path for devices that don't natively support 16kHz.
+        The target is still 16kHz; the actual rate may differ at the device
+        boundary and gets resampled before transcription.
+        """
+        assert AudioService.TARGET_SAMPLE_RATE == 16000
 
     def test_channels_is_mono(self):
         """Audio is recorded in mono."""
