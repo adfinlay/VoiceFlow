@@ -15,12 +15,6 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 
-[project.urls]
-Homepage = "https://get-voice-flow.vercel.app/"
-Repository = "https://github.com/infiniV/VoiceFlow"
-Issues = "https://github.com/infiniV/VoiceFlow/issues"
-Releases = "https://github.com/infiniV/VoiceFlow/releases"
-
 requires-python = ">=3.9"
 
 dependencies = [
@@ -35,6 +29,12 @@ dependencies = [
     "evdev>=1.7.0; sys_platform == 'linux'",
     "nvidia-cublas-cu12; sys_platform == 'linux'",
 ]
+
+[project.urls]
+Homepage = "https://get-voice-flow.vercel.app/"
+Repository = "https://github.com/infiniV/VoiceFlow"
+Issues = "https://github.com/infiniV/VoiceFlow/issues"
+Releases = "https://github.com/infiniV/VoiceFlow/releases"
 
 [dependency-groups]
 dev = [
