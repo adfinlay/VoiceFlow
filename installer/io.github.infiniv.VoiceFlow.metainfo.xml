@@ -4,15 +4,15 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>VoiceFlow</name>
-  <summary>Offline voice-to-text dictation for Linux, Windows &amp; macOS</summary>
+  <summary>Offline voice dictation for Linux and Windows, using Whisper</summary>
   <description>
-    <p>VoiceFlow is a free, open-source voice-to-text dictation utility. Hold a global hotkey, speak, and your transcribed words are pasted at the cursor. Runs fully offline using OpenAI Whisper via faster-whisper — no cloud, no telemetry, no subscription.</p>
+    <p>VoiceFlow is an open-source voice-to-text dictation app for Linux and Windows. Hold a global hotkey to record, release and the transcript is pasted at the cursor. It uses OpenAI Whisper through faster-whisper, running on your own machine. Free, no account needed.</p>
     <p>Features:</p>
     <ul>
-      <li>Push-to-talk global hotkey with custom combos and modifier-only support</li>
+      <li>Push-to-talk global hotkey, including modifier-only combos</li>
       <li>Automatic paste at cursor on release</li>
       <li>Wayland and X11 support on Linux</li>
-      <li>Configurable Whisper models including Turbo</li>
+      <li>Configurable Whisper models, including Turbo</li>
       <li>Searchable transcription history</li>
       <li>CUDA GPU acceleration with automatic CPU fallback</li>
     </ul>

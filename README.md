@@ -1,6 +1,6 @@
 # VoiceFlow
 
-> Open-source, offline voice-to-text dictation for **Windows, Linux, and macOS**. Hold a hotkey, speak, and your words are pasted at the cursor — powered by Whisper, fully local, no cloud, no subscription.
+> Open-source voice dictation for **Windows and Linux**. Hold a hotkey to record, release and the transcript is pasted at your cursor. Runs offline with Whisper. Free, no account needed. (macOS works but isn't officially supported yet.)
 
 **Website:** [get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · **Source:** [github.com/infiniV/VoiceFlow](https://github.com/infiniV/VoiceFlow)
 

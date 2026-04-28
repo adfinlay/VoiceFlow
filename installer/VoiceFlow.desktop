@@ -2,7 +2,7 @@
 Type=Application
 Name=VoiceFlow
 GenericName=Voice Dictation
-Comment=Offline voice-to-text dictation. Hold hotkey, speak, paste. Private, local Whisper.
+Comment=Voice dictation with Whisper. Hold a hotkey to record, release to paste the transcript. Runs offline.
 Exec=VoiceFlow
 Icon=voiceflow
 Categories=Utility;AudioVideo;Audio;Office;
