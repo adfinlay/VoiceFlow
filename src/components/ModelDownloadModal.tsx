@@ -23,24 +23,27 @@ export function ModelDownloadModal({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <DialogContent
-        className="sm:max-w-md glass-strong rounded-2xl border-border/50"
+        className="sm:max-w-md"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>Downloading Model</DialogTitle>
-          <DialogDescription>
-            Downloading the {modelName} model for transcription
+        <DialogHeader className="space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+            downloading model
+          </p>
+          <DialogTitle className="font-display text-xl font-medium tracking-tight text-cream">
+            {modelName}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-cream-muted leading-relaxed">
+            Pulling weights from Hugging Face. Cached locally — this is a one-time download.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex items-center justify-center py-4">
-          <ModelDownloadProgress
-            modelName={modelName}
-            onComplete={onComplete}
-            onCancel={onCancel}
-            autoStart={true}
-          />
-        </div>
+        <ModelDownloadProgress
+          modelName={modelName}
+          onComplete={onComplete}
+          onCancel={onCancel}
+          autoStart={true}
+        />
       </DialogContent>
     </Dialog>
   );

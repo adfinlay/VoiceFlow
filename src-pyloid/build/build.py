@@ -45,6 +45,10 @@ if __name__ == '__main__':
 			# Don't bundle PortAudio - use system's libportaudio which has
 			# PipeWire/PulseAudio backends. Ubuntu's PortAudio only has ALSA.
 			'--exclude-module=_sounddevice_data',
+			# Bundle the nvidia-* pip packages so ctranslate2 can dlopen
+			# libcublas/libcudnn from inside the AppImage on systems that
+			# don't have a system-wide CUDA install.
+			'--collect-all=nvidia',
 		]
 
 	pyinstaller(

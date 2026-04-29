@@ -3,36 +3,53 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+  VoiceFlow theme - aligned with the GetVoiceFlow marketing site brand.
+  Tokens here are the single source of truth. Components reference them
+  via Tailwind classes (`bg-card`, `text-foreground`, `border-border`,
+  etc.) and the legacy class shims at the bottom map historical names
+  (`glass-card`, `orb`, `bg-grid`, `text-gradient-*`, `headline-serif`,
+  `divider-gradient`, `badge-glow`) onto the new flat aesthetic so we
+  don't have to rewrite every component to remove decoration.
+*/
+
 @theme inline {
-    /* Premium Typography */
-    --font-sans: "Clash Display", "Inter", "Segoe UI", system-ui, sans-serif;
-    --font-serif: "Instrument Serif", Georgia, serif;
+    /* Typography */
+    --font-display: "Clash Display", system-ui, sans-serif;
+    --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-serif: "Clash Display", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "Fira Code", monospace;
 
-    --radius: 0.75rem;
-    --radius-lg: 1.5rem;
-    --radius-xl: 2rem;
-    --radius-3xl: 1.875rem;
+    /* Radius - three sizes only */
+    --radius-sm: 0.375rem;  /* 6px */
+    --radius: 0.5rem;       /* 8px */
+    --radius-lg: 0.75rem;   /* 12px */
+    --radius-xl: 1rem;      /* 16px - used by a few legacy components */
 
+    /* Tracking */
     --tracking-tighter: -0.05em;
     --tracking-tight: -0.025em;
     --tracking-wide: 0.025em;
     --tracking-wider: 0.05em;
     --tracking-widest: 0.1em;
 
-    /* Enhanced Shadows */
-    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
-    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    --shadow-glow: 0 0 40px -10px var(--primary);
-    --shadow-glow-lg: 0 0 80px -20px var(--primary);
-    --shadow-multi: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.05);
-
-    /* Animation Durations */
+    /* Animation */
     --animate-in-duration: 0.15s;
 
-    /* Variable Mapping */
+    /* Brand surface ramp */
     --color-background: var(--background);
     --color-foreground: var(--foreground);
+    --color-surface: var(--surface);
+    --color-surface-elevated: var(--surface-elevated);
+    --color-cream: var(--cream);
+    --color-cream-muted: var(--cream-muted);
+
+    /* Accent ramp - identical to the marketing site */
+    --color-accent-400: var(--accent-400);
+    --color-accent-500: var(--accent-500);
+    --color-accent-600: var(--accent-600);
+
+    /* shadcn token mirroring */
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
     --color-popover: var(--popover);
@@ -53,83 +70,93 @@
 }
 
 :root {
-    /* Premium Editorial Palette - Light Mode */
-    --primary-emerald: #34d399;
-    --cream: #faf8f5;
-    --navy: #050a0f;
-    --sidebar-border: var(--border);
-    --orb-secondary-mix: oklch(0.6 0.13 240);
-    --orb-accent-mix: oklch(0.55 0.15 280);
+    /* Light mode */
+    --background: #fafafa;
+    --foreground: #09090b;
+    --surface: #ffffff;
+    --surface-elevated: #ffffff;
+    --cream: #09090b;
+    --cream-muted: #71717a;
 
-    /* Light Mode */
-    --background: #faf8f5;
-    --foreground: #0a0f14;
+    --accent-400: #4ade80;
+    --accent-500: #22c55e;
+    --accent-600: #16a34a;
 
-    --card: #ffffff;
-    --card-foreground: #0a0f14;
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface);
+    --popover-foreground: var(--foreground);
 
-    --popover: #ffffff;
-    --popover-foreground: #0a0f14;
+    --primary: var(--accent-500);
+    --primary-foreground: #ffffff;
 
-    --primary: #10b981;
-    --primary-foreground: #faf8f5;
+    --secondary: #f4f4f5;
+    --secondary-foreground: var(--foreground);
 
-    --secondary: #f0ebe5;
-    --secondary-foreground: #0a0f14;
+    --muted: #f4f4f5;
+    --muted-foreground: var(--cream-muted);
 
-    --muted: #f0ebe5;
-    --muted-foreground: #6b7280;
-
-    --accent: #f0ebe5;
-    --accent-foreground: #0a0f14;
+    --accent: #f4f4f5;
+    --accent-foreground: var(--foreground);
 
     --destructive: #ef4444;
-    --destructive-foreground: #faf8f5;
+    --destructive-foreground: #ffffff;
 
-    --border: #e5e0da;
-    --input: #e5e0da;
-    --ring: #10b981;
+    --border: rgba(9, 9, 11, 0.10);
+    --input: rgba(9, 9, 11, 0.10);
+    --ring: var(--accent-500);
 
-    --sidebar: #f5f0eb;
-    --sidebar-foreground: #374151;
+    /* Slightly more visible dot pattern in light mode where the white
+       background washes out subtle textures. */
+    --dots-opacity: 0.06;
+
+    --sidebar: var(--surface);
+    --sidebar-foreground: var(--cream-muted);
     --sidebar-border: var(--border);
+    --sidebar-accent: #f4f4f5;
 }
 
 .dark {
-    /* Premium Editorial Palette - Dark Mode */
-    /* Rich dark navy background instead of pure black */
-    --background: #050a0f;
-    --foreground: #faf8f5;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --surface: #111113;
+    --surface-elevated: #1a1a1d;
+    --cream: #fafafa;
+    --cream-muted: #a1a1aa;
 
-    /* Glassy cards with warm undertones */
-    --card: #0c1218;
-    --card-foreground: #faf8f5;
+    --accent-400: #4ade80;
+    --accent-500: #22c55e;
+    --accent-600: #16a34a;
 
-    --popover: #0c1218;
-    --popover-foreground: #faf8f5;
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface);
+    --popover-foreground: var(--foreground);
 
-    /* Emerald/Teal Primary Accent */
-    --primary: #34d399;
-    --primary-foreground: #050a0f;
+    --primary: var(--accent-500);
+    --primary-foreground: #09090b;
 
-    --secondary: #111921;
-    --secondary-foreground: #faf8f5;
+    --secondary: var(--surface-elevated);
+    --secondary-foreground: var(--foreground);
 
-    --muted: #111921;
-    --muted-foreground: #9ca3af;
+    --muted: var(--surface-elevated);
+    --muted-foreground: var(--cream-muted);
 
-    --accent: #111921;
-    --accent-foreground: #faf8f5;
+    --accent: var(--surface-elevated);
+    --accent-foreground: var(--foreground);
 
     --destructive: #f87171;
-    --destructive-foreground: #050a0f;
+    --destructive-foreground: #09090b;
 
-    --border: #1a242e;
-    --input: #1a242e;
-    --ring: #34d399;
+    --border: rgba(255, 255, 255, 0.06);
+    --input: rgba(255, 255, 255, 0.06);
+    --ring: var(--accent-500);
+    --dots-opacity: 0.04;
 
-    --sidebar: #080e14;
-    --sidebar-foreground: #d1d5db;
+    --sidebar: var(--surface);
+    --sidebar-foreground: var(--cream-muted);
+    --sidebar-border: var(--border);
+    --sidebar-accent: var(--surface-elevated);
 }
 
 @layer base {
@@ -141,341 +168,209 @@
     html {
         scroll-behavior: smooth;
         scrollbar-width: thin;
-        scrollbar-color: color-mix(in srgb, var(--foreground), transparent 80%) transparent;
+        scrollbar-color: color-mix(in srgb, var(--foreground), transparent 92%) transparent;
     }
 
     body {
         background-color: var(--background);
-        color: var(--foreground);
+        color: var(--cream-muted);
         font-family: var(--font-sans);
-        letter-spacing: var(--tracking-wide);
-        position: relative;
         overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
 
-    /* NOISE TEXTURE OVERLAY - More subtle for premium feel, GPU accelerated */
-    body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
-        pointer-events: none;
-        opacity: 0.5;
-        /* Promote to own GPU layer to prevent interference with other elements */
-        transform: translateZ(0);
-        will-change: auto;
+    h1, h2, h3, h4, h5, h6 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        color: var(--cream);
     }
 
-    /* Selection styling with emerald */
     ::selection {
-        background-color: var(--primary);
-        color: var(--primary-foreground);
-        text-shadow: none;
+        background-color: color-mix(in srgb, var(--accent-500), transparent 70%);
+        color: var(--cream);
     }
 }
 
+/* Scrollbar - 6px brand spec */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--foreground), transparent 92%);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--foreground), transparent 86%);
+}
+
 @layer utilities {
-    /* Premium Glass Morphism */
-    .glass {
-        background: color-mix(in srgb, var(--background), transparent 20%);
-        backdrop-filter: blur(40px) saturate(150%);
-        border: 1px solid color-mix(in srgb, var(--foreground), transparent 92%);
+    /* ───────── Brand primitives ───────── */
+
+    .panel {
+        background-color: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
     }
 
-    .glass-strong {
-        background: linear-gradient(
-            135deg,
-            color-mix(in srgb, var(--card), transparent 30%) 0%,
-            color-mix(in srgb, var(--card), transparent 50%) 100%
+    .panel-elevated {
+        background-color: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+    }
+
+    .bg-dots {
+        background-image: radial-gradient(
+            circle,
+            color-mix(in srgb, var(--foreground) calc(var(--dots-opacity) * 100%), transparent) 1px,
+            transparent 1px
         );
-        backdrop-filter: blur(40px) saturate(150%);
-        border: 1px solid color-mix(in srgb, var(--foreground), transparent 90%);
-        box-shadow:
-            0 8px 32px rgba(0, 0, 0, 0.2),
-            0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        background-size: 24px 24px;
+    }
+
+    .divider {
+        height: 1px;
+        background-color: var(--border);
+    }
+
+    .hero-wave-mask {
+        mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 85%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 10%, black 85%, transparent 100%);
+    }
+
+    /* ───────── Legacy compatibility shims ─────────
+       Previous design used heavy glass-morphism with backdrop-blur, animated
+       orbs, gradient text, and grid backgrounds. We deliberately keep these
+       class names so we don't have to touch every component, but they now
+       render as flat brand-aligned surfaces. */
+
+    .glass,
+    .glass-strong,
+    .glass-card {
+        background-color: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 
     .glass-card {
         position: relative;
-        background: linear-gradient(
-            135deg,
-            color-mix(in srgb, var(--card), transparent 20%) 0%,
-            color-mix(in srgb, var(--card), transparent 40%) 100%
-        );
-        backdrop-filter: blur(40px) saturate(150%);
-        border-radius: var(--radius-3xl);
         overflow: hidden;
     }
 
-    /* Glass card border - static, no hover animation */
-    .glass-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        border-radius: inherit;
-        padding: 1px;
-        background: linear-gradient(
-            135deg,
-            color-mix(in srgb, var(--foreground), transparent 90%) 0%,
-            transparent 50%,
-            color-mix(in srgb, var(--primary), transparent 85%) 100%
-        );
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor;
-        mask-composite: exclude;
-        pointer-events: none;
-        opacity: 0.5;
-    }
-
-    /* Text Utilities */
-    .text-gradient {
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-image: linear-gradient(
-            135deg,
-            var(--foreground) 0%,
-            color-mix(in srgb, var(--foreground), transparent 40%) 100%
-        );
-    }
-
-    .text-gradient-primary {
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-image: linear-gradient(
-            135deg,
-            var(--foreground) 20%,
-            var(--primary) 100%
-        );
-    }
-
+    .text-gradient,
+    .text-gradient-primary,
     .text-gradient-emerald {
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-image: linear-gradient(
-            135deg,
-            var(--primary) 0%,
-            color-mix(in srgb, var(--primary), black 15%) 50%,
-            color-mix(in srgb, var(--primary), black 30%) 100%
-        );
+        background: none;
+        -webkit-text-fill-color: currentColor;
+        color: inherit;
     }
 
-    /* Serif Typography for Headlines */
-    .font-serif {
-        font-family: var(--font-serif);
-    }
-
+    /* "Serif headline" treatment becomes a solid accent-green pop */
     .headline-serif {
-        font-family: var(--font-serif);
-        font-style: italic;
-        font-weight: 400;
+        font-family: var(--font-display);
+        font-style: normal;
+        font-weight: 500;
+        color: var(--accent-500);
     }
 
-    /* Button Glow Effects - Disabled for cleaner UI */
-    .btn-glow {
-        position: relative;
-        overflow: hidden;
-    }
-
-    /* Gradient Dividers */
     .divider-gradient {
         height: 1px;
-        background: linear-gradient(
-            90deg,
-            transparent 0%,
-            color-mix(in srgb, var(--border), transparent 30%) 20%,
-            var(--primary) 50%,
-            color-mix(in srgb, var(--border), transparent 30%) 80%,
-            transparent 100%
-        );
+        background-color: var(--border);
     }
 
-    /* Grid Pattern Background */
     .bg-grid {
-        background-image: linear-gradient(
-            color-mix(in srgb, var(--foreground), transparent 97%) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            color-mix(in srgb, var(--foreground), transparent 97%) 1px,
-            transparent 1px
-        );
-        background-size: 60px 60px;
+        background-image: radial-gradient(circle, color-mix(in srgb, var(--foreground), transparent 96%) 1px, transparent 1px);
+        background-size: 24px 24px;
     }
 
-    /* Animated Gradient Orbs - GPU accelerated to prevent flickering */
-    .orb {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(100px);
-        pointer-events: none;
-        opacity: 0.5;
-        /* Force GPU layer to prevent repaints affecting other elements */
-        will-change: transform;
-        transform: translateZ(0);
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
-    }
-
-    .orb-primary {
-        background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
-    }
-
-    .orb-secondary {
-        background: radial-gradient(circle, color-mix(in srgb, var(--primary), var(--orb-secondary-mix) 50%) 0%, transparent 70%);
-    }
-
+    /* Animated decoration orbs - hidden site-wide */
+    .orb,
+    .orb-primary,
+    .orb-secondary,
     .orb-accent {
-        background: radial-gradient(circle, color-mix(in srgb, var(--primary), var(--orb-accent-mix) 30%) 0%, transparent 70%);
+        display: none !important;
     }
 
-    @keyframes float-orb {
-        0% { transform: translate3d(0, 0, 0) scale(1); }
-        25% { transform: translate3d(30px, -30px, 0) scale(1.1); }
-        50% { transform: translate3d(-20px, 20px, 0) scale(0.95); }
-        75% { transform: translate3d(-30px, -20px, 0) scale(1.05); }
-        100% { transform: translate3d(0, 0, 0) scale(1); }
-    }
+    /* ───────── Badges ───────── */
 
-    @media (prefers-reduced-motion: no-preference) {
-        .orb-primary {
-            animation: float-orb 20s linear infinite;
-        }
-        .orb-secondary {
-            animation: float-orb 25s linear infinite reverse;
-        }
-        .orb-accent {
-            animation: float-orb 30s linear infinite;
-        }
-    }
-
-    /* macOS Window Controls */
-    .macos-controls {
-        display: flex;
-        gap: 8px;
-    }
-
-    .macos-controls span {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-    }
-
-    .macos-controls span:nth-child(1) {
-        background: #ff5f57;
-    }
-
-    .macos-controls span:nth-child(2) {
-        background: #febc2e;
-    }
-
-    .macos-controls span:nth-child(3) {
-        background: #28c840;
-    }
-
-    /* Scrollbar - Premium style */
-    ::-webkit-scrollbar {
-        width: 8px;
-    }
-    ::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: color-mix(in srgb, var(--foreground), transparent 80%);
-        border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: var(--primary);
-    }
-
-    /* Scroll Indicator Animation */
-    @keyframes scroll-bounce {
-        0%, 100% {
-            transform: translateY(0);
-            opacity: 1;
-        }
-        50% {
-            transform: translateY(8px);
-            opacity: 0.5;
-        }
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-        .scroll-indicator {
-            animation: scroll-bounce 2s ease-in-out infinite;
-        }
-    }
-
-    /* Badge Styles - Clean, no glow animation */
     .badge-glow {
         position: relative;
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: color-mix(in srgb, var(--primary), transparent 85%);
-        border: 1px solid color-mix(in srgb, var(--primary), transparent 60%);
-        border-radius: 9999px;
-        font-size: 0.875rem;
+        padding: 0.25rem 0.625rem;
+        background: color-mix(in srgb, var(--accent-500), transparent 90%);
+        border: 1px solid color-mix(in srgb, var(--accent-500), transparent 70%);
+        border-radius: var(--radius);
+        font-size: 0.75rem;
         font-weight: 500;
-        color: var(--primary);
+        color: var(--accent-500);
+        font-family: var(--font-mono);
     }
 
-    /* Waveform Animation - uses scaleY to avoid layout recalculation */
+    /* ───────── macOS window controls ───────── */
+
+    .macos-controls { display: flex; gap: 8px; }
+    .macos-controls span { width: 12px; height: 12px; border-radius: 50%; }
+    .macos-controls span:nth-child(1) { background: #ff5f57; }
+    .macos-controls span:nth-child(2) { background: #febc2e; }
+    .macos-controls span:nth-child(3) { background: #28c840; }
+
+    /* ───────── Animations - kept from prior theme ───────── */
+
     @keyframes waveform {
         0%, 100% { transform: scaleY(0.2); }
         50% { transform: scaleY(1); }
     }
 
-    .waveform-bar {
-        transform-origin: center bottom;
-    }
+    .waveform-bar { transform-origin: center bottom; }
 
     @media (prefers-reduced-motion: no-preference) {
-        .waveform-bar {
-            animation: waveform 0.8s ease-in-out infinite;
-        }
+        .waveform-bar { animation: waveform 0.8s ease-in-out infinite; }
     }
 
-    /* Popup processing dots animation */
     @keyframes fade {
         0%, 100% { opacity: 0.3; }
         50% { opacity: 1; }
     }
 
-    /* Shimmer Animation for Processing */
     @keyframes shimmer {
-        0% {
-            background-position: -200% 0;
-        }
-        100% {
-            background-position: 200% 0;
-        }
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
     }
 
     .shimmer {
         background: linear-gradient(
             90deg,
             transparent 0%,
-            color-mix(in srgb, var(--primary), transparent 70%) 50%,
+            color-mix(in srgb, var(--accent-500), transparent 80%) 50%,
             transparent 100%
         );
         background-size: 200% 100%;
     }
 
     @media (prefers-reduced-motion: no-preference) {
-        .shimmer {
-            animation: shimmer 2s linear infinite;
-        }
+        .shimmer { animation: shimmer 2s linear infinite; }
+    }
+
+    @keyframes scroll-bounce {
+        0%, 100% { transform: translateY(0); opacity: 1; }
+        50% { transform: translateY(8px); opacity: 0.5; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .scroll-indicator { animation: scroll-bounce 2s ease-in-out infinite; }
+    }
+
+    @keyframes cursor-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
     }
 }
 
-/* Landing Page Specific Styles */
+/* ───────── Landing-page legacy classes (mostly unused in app) ───────── */
+
 .landing-page {
     position: relative;
     min-height: 100vh;
@@ -483,47 +378,20 @@
 }
 
 .landing-page .bg-effects {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    overflow: hidden;
+    display: none;
 }
 
-/* Hero Visual Styles */
-.hero-visual {
-    position: relative;
-}
+.hero-visual { position: relative; }
+.hero-visual::before { display: none; }
 
-.hero-visual::before {
-    content: "";
-    position: absolute;
-    inset: -20px;
-    background: radial-gradient(
-        circle at center,
-        color-mix(in srgb, var(--primary), transparent 80%) 0%,
-        transparent 70%
-    );
-    filter: blur(40px);
-    z-index: -1;
-}
+.feature-card { transition: background-color 0.15s ease; }
 
-/* Feature Card - Clean, no hover animation */
-.feature-card {
-    transition: background-color 0.15s ease;
-}
-
-/* Comparison Table Styles */
-.comparison-table {
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
+.comparison-table { border-collapse: separate; border-spacing: 0; }
 .comparison-table th,
 .comparison-table td {
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--border), transparent 50%);
+    border-bottom: 1px solid var(--border);
 }
-
 .comparison-table th {
     text-align: left;
     font-weight: 500;
@@ -532,77 +400,24 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
-
 .comparison-table tbody tr:hover {
-    background: color-mix(in srgb, var(--primary), transparent 95%);
+    background: color-mix(in srgb, var(--accent-500), transparent 96%);
 }
 
-/* CTA Section Gradient */
-.cta-gradient {
-    position: relative;
-    overflow: hidden;
-}
+.cta-gradient { position: relative; overflow: hidden; }
+.cta-gradient::before { display: none; }
 
-.cta-gradient::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--primary), transparent 90%) 0%,
-        transparent 50%,
-        color-mix(in srgb, var(--primary), transparent 95%) 100%
-    );
-    z-index: -1;
-}
+/* ───────── Reduced-effects mode ─────────
+   The prior theme had heavy backdrop-filter/orbs/noise that crushed Linux
+   software rendering. The new theme has none of those, so this mode is
+   now effectively a no-op. App.tsx still toggles `.reduced-effects` on
+   Linux; we keep the class hook in case future effects need gating. */
 
-/* ============================================================================
-   Reduced Effects Mode (Linux / software rendering)
-   Qt WebEngine on Linux often falls back to CPU compositing.
-   backdrop-filter, large blurs, and animated orbs are extremely expensive
-   without GPU acceleration - they block scrolling for seconds.
-   ============================================================================ */
-.reduced-effects .glass,
-.reduced-effects .glass-strong,
-.reduced-effects .glass-card {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-.reduced-effects .glass {
-    background: var(--background) !important;
-}
-
-.reduced-effects .glass-strong {
-    background: var(--card) !important;
-}
-
-.reduced-effects .glass-card {
-    background: var(--card) !important;
-}
-
-.reduced-effects .bg-card {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-/* Disable expensive noise texture overlay */
-.reduced-effects body::before,
-.reduced-effects::before {
-    display: none !important;
-}
-
-/* Disable animated blurred orbs */
-.reduced-effects .orb {
-    display: none !important;
-}
-
-/* Disable grid background pattern */
-.reduced-effects .bg-grid {
-    background-image: none !important;
-}
-
-/* Disable hero blur */
-.reduced-effects .hero-visual::before {
-    filter: none !important;
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }

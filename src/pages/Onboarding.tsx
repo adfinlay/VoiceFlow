@@ -7,15 +7,11 @@ import {
   Mic,
   AlertCircle,
   Zap,
-  Shield,
-  Globe,
   Cpu,
-  Sparkles,
   Keyboard,
   Download,
-  Target,
   HardDrive,
-  Info,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { ModelDownloadProgress } from "@/components/ModelDownloadProgress";
 import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Settings, Options, GpuInfo } from "@/lib/types";
 import {
   MODEL_OPTIONS,
@@ -38,34 +35,45 @@ import {
   isEnglishOnlyModel,
 } from "@/lib/constants";
 
-// --- Step Components ---
+// ============================================================================
+// STEP: WELCOME
+// ============================================================================
 
 const StepWelcome = () => (
-  <div className="space-y-6">
-    <p className="text-xl font-light leading-relaxed text-muted-foreground max-w-lg">
+  <div className="space-y-8 max-w-2xl w-full">
+    <p className="text-base md:text-lg leading-relaxed text-cream-muted text-center">
       Dictation designed for{" "}
-      <span className="headline-serif text-foreground">privacy</span> and{" "}
-      <span className="headline-serif text-foreground">flow</span>.
+      <span className="text-accent-500 font-medium">privacy</span> and{" "}
+      <span className="text-accent-500 font-medium">flow</span>.
     </p>
 
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {ONBOARDING_FEATURES.map((feature) => (
         <div
           key={feature.label}
-          className="group glass-card flex flex-col items-center text-center gap-3 p-6"
+          className="border border-border rounded-md bg-surface flex items-start gap-3 p-4 text-left"
         >
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-            <feature.icon className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="font-semibold text-foreground">{feature.label}</p>
-            <p className="text-sm text-muted-foreground">{feature.desc}</p>
+          <feature.icon
+            className="w-4 h-4 mt-0.5 flex-shrink-0 text-accent-500"
+            strokeWidth={2}
+          />
+          <div className="min-w-0">
+            <p className="font-medium text-cream text-sm leading-tight">
+              {feature.label}
+            </p>
+            <p className="text-[11px] text-cream-muted leading-relaxed mt-1">
+              {feature.desc}
+            </p>
           </div>
         </div>
       ))}
     </div>
   </div>
 );
+
+// ============================================================================
+// STEP: AUDIO
+// ============================================================================
 
 const StepAudio = ({
   microphone,
@@ -79,61 +87,48 @@ const StepAudio = ({
   const [amplitude, setAmplitude] = useState(0);
   const [isListening, setIsListening] = useState(false);
 
-  // Listen for amplitude events from backend
   useEffect(() => {
     const handleAmplitude = (e: CustomEvent<number>) => {
       setAmplitude(e.detail);
     };
-
     document.addEventListener("amplitude", handleAmplitude as EventListener);
-
     return () => {
-      document.removeEventListener("amplitude", handleAmplitude as EventListener);
+      document.removeEventListener(
+        "amplitude",
+        handleAmplitude as EventListener
+      );
     };
   }, []);
 
-  // Start test recording on mount, stop on unmount
   useEffect(() => {
     let mounted = true;
-
     const startRecording = async () => {
       try {
-        // Start test recording with the initial microphone
         await api.updateSettings({ microphone });
         await api.startTestRecording();
-        if (mounted) {
-          setIsListening(true);
-        }
+        if (mounted) setIsListening(true);
       } catch (error) {
         console.error("[Audio] Failed to start test recording:", error);
       }
     };
-
     const timer = setTimeout(startRecording, 100);
-
     return () => {
       mounted = false;
       clearTimeout(timer);
-      // Stop test recording when leaving this step
       api.stopTestRecording().catch(() => {});
       setIsListening(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run on mount/unmount, device changes handled by handleDeviceChange
+  }, []);
 
-  // Handle device change - restart recording with new device
   const handleDeviceChange = async (backendDeviceId: string) => {
     const backendId = Number(backendDeviceId);
     setMicrophone(backendId);
-
-    // Stop current recording
     try {
       await api.stopTestRecording();
     } catch {
-      // Ignore errors
+      // ignore
     }
-
-    // Update setting and restart
     try {
       await api.updateSettings({ microphone: backendId });
       await api.startTestRecording();
@@ -144,86 +139,106 @@ const StepAudio = ({
   };
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <div className="glass-card p-1">
-        <Select
-          value={String(microphone)}
-          onValueChange={handleDeviceChange}
-        >
-          <SelectTrigger className="h-14 text-base bg-transparent border-0 rounded-xl px-4 focus:ring-0 focus:ring-offset-0">
-            <SelectValue placeholder="Select a microphone" />
+    <div className="space-y-5 max-w-xl w-full">
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 mb-2">
+          input device
+        </p>
+        <Select value={String(microphone)} onValueChange={handleDeviceChange}>
+          <SelectTrigger className="h-12 text-sm bg-secondary/40 border-border hover:bg-secondary/60 transition-colors rounded-md">
+            <div className="flex items-center gap-2">
+              <Mic className="w-4 h-4 text-cream-muted/70" strokeWidth={2} />
+              <SelectValue placeholder="Select a microphone" />
+            </div>
           </SelectTrigger>
-          <SelectContent className="border-border/50 bg-popover/95 backdrop-blur-xl shadow-2xl rounded-xl">
+          <SelectContent>
             {options.microphones.map((mic) => (
-              <SelectItem
-                key={mic.id}
-                value={String(mic.id)}
-                className="py-3 rounded-lg cursor-pointer"
-              >
-                <span className="flex items-center gap-3">
-                  <Mic className="w-4 h-4 text-muted-foreground" />
-                  <span>{mic.name}</span>
-                </span>
+              <SelectItem key={mic.id} value={String(mic.id)}>
+                {mic.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="h-24 w-full glass-card flex items-center justify-center p-4 relative">
-        {isListening ? (
-          <AudioVisualizer
-            amplitude={amplitude}
-            bars={40}
-            className="gap-1 h-14 text-primary"
-          />
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <span className="w-2 h-2 rounded-full bg-muted" />
-            Waiting for microphone...
-          </div>
-        )}
-
-        <div
-          className={`absolute right-4 top-4 w-2 h-2 rounded-full transition-all ${isListening ? "bg-primary" : "bg-muted-foreground/30"}`}
-        />
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 mb-2 flex items-center justify-between">
+          <span>level meter</span>
+          <span
+            className={cn(
+              "flex items-center gap-1.5 normal-case tracking-normal text-[11px]",
+              isListening ? "text-accent-500" : "text-cream-muted/40"
+            )}
+          >
+            <span
+              className={cn(
+                "w-1.5 h-1.5 rounded-full",
+                isListening ? "bg-accent-500" : "bg-cream-muted/30"
+              )}
+            />
+            {isListening ? "listening" : "idle"}
+          </span>
+        </p>
+        <div className="h-24 w-full border border-border rounded-md bg-surface flex items-center justify-center px-4">
+          {isListening ? (
+            <AudioVisualizer
+              amplitude={amplitude}
+              bars={40}
+              className="gap-1 h-14 text-accent-500"
+            />
+          ) : (
+            <span className="font-mono text-xs text-cream-muted/60">
+              waiting for microphone…
+            </span>
+          )}
+        </div>
       </div>
 
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        Speak now to test your input levels. The visualizer should respond to your voice.
+      <p className="text-sm text-cream-muted leading-relaxed">
+        Speak now to test your input levels — the meter should respond to your
+        voice.
       </p>
     </div>
   );
 };
 
-// Device option configuration
+// ============================================================================
+// STEP: HARDWARE
+// ============================================================================
+
 const DEVICE_OPTIONS = [
   {
     id: "auto",
     label: "Auto",
     desc: "Recommended",
     detail: "Best available",
-    description: "Automatically selects the best available compute device. Uses GPU if available and properly configured, otherwise falls back to CPU.",
+    description:
+      "Automatically selects the best available compute device. Uses GPU if available and properly configured, otherwise falls back to CPU.",
     icon: Zap,
-    bestFor: "Most users who want optimal performance without manual configuration.",
+    bestFor:
+      "Most users who want optimal performance without manual configuration.",
   },
   {
     id: "cuda",
     label: "CUDA GPU",
-    desc: "NVIDIA Only",
+    desc: "NVIDIA only",
     detail: "Fastest",
-    description: "Uses NVIDIA GPU with CUDA acceleration for maximum transcription speed. Requires compatible NVIDIA GPU with CUDA libraries (cuDNN + cuBLAS).",
+    description:
+      "Uses NVIDIA GPU with CUDA acceleration for maximum transcription speed. Requires compatible NVIDIA GPU with CUDA libraries (cuDNN + cuBLAS).",
     icon: Cpu,
-    bestFor: "Users with NVIDIA GPUs who want the fastest possible transcription.",
+    bestFor:
+      "Users with NVIDIA GPUs who want the fastest possible transcription.",
   },
   {
     id: "cpu",
-    label: "CPU Only",
+    label: "CPU only",
     desc: "Universal",
     detail: "Compatible",
-    description: "Uses CPU for transcription. Works on any system but slower than GPU acceleration. Good fallback option.",
+    description:
+      "Uses CPU for transcription. Works on any system but slower than GPU acceleration. Good fallback option.",
     icon: Cpu,
-    bestFor: "Systems without compatible GPU or when GPU acceleration causes issues.",
+    bestFor:
+      "Systems without compatible GPU or when GPU acceleration causes issues.",
   },
 ];
 
@@ -247,13 +262,11 @@ const StepHardware = ({
     totalBytes: number;
   } | null>(null);
 
-  // Poll for download progress while downloading
   useEffect(() => {
     if (!downloading) {
       setDownloadProgress(null);
       return;
     }
-
     const pollProgress = async () => {
       try {
         const progress = await api.getCudnnDownloadProgress();
@@ -264,36 +277,26 @@ const StepHardware = ({
             totalBytes: progress.totalBytes,
           });
         } else if (progress.complete) {
-          // Download finished
           setDownloading(false);
-          if (progress.success) {
-            onGpuInfoUpdate();
-          } else if (progress.error) {
-            setDownloadError(progress.error);
-          }
+          if (progress.success) onGpuInfoUpdate();
+          else if (progress.error) setDownloadError(progress.error);
         }
       } catch (err) {
         console.error("Failed to poll progress:", err);
       }
     };
-
-    // Poll every 500ms
     const interval = setInterval(pollProgress, 500);
-    pollProgress(); // Initial poll
-
+    pollProgress();
     return () => clearInterval(interval);
   }, [downloading, onGpuInfoUpdate]);
 
   const handleDeviceSelect = async (newDevice: string) => {
     setDeviceError(null);
-
-    // Validate the device selection
     const validation = await api.validateDevice(newDevice);
     if (!validation.valid) {
       setDeviceError(validation.error);
       return;
     }
-
     setDevice(newDevice);
   };
 
@@ -313,36 +316,41 @@ const StepHardware = ({
     }
   };
 
-  // Format bytes to human readable
   const formatBytes = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const selectedDevice = DEVICE_OPTIONS.find((d) => d.id === device);
   const showDownloadButton = gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable;
-
-  // Determine resolved device for display
-  const resolvedDevice = device === "auto"
-    ? (gpuInfo?.cudaAvailable ? "CUDA" : "CPU")
-    : device.toUpperCase();
+  const resolvedDevice =
+    device === "auto"
+      ? gpuInfo?.cudaAvailable
+        ? "cuda"
+        : "cpu"
+      : device;
 
   return (
-    <div className="flex gap-6 w-full max-w-5xl">
-      {/* Left side - Device selection grid */}
-      <div className="flex-1 space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 w-full max-w-5xl h-full min-h-0">
+      <div className="space-y-4 min-w-0 overflow-y-auto pr-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <Cpu className="w-4 h-4" />
-            Compute Device
-          </span>
-          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-            resolvedDevice === "CUDA"
-              ? "bg-green-500/10 text-green-500"
-              : "bg-muted text-muted-foreground"
-          }`}>
-            Will use: {resolvedDevice}
-          </span>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+            compute device
+          </p>
+          <p className="font-mono text-[10px] flex items-center gap-2">
+            <span className="text-cream-muted/40 uppercase tracking-widest">
+              resolves to
+            </span>
+            <span
+              className={cn(
+                resolvedDevice === "cuda"
+                  ? "text-accent-500"
+                  : "text-cream-muted",
+                "uppercase tracking-widest"
+              )}
+            >
+              {resolvedDevice}
+            </span>
+          </p>
         </div>
 
         <div
@@ -353,8 +361,6 @@ const StepHardware = ({
           {DEVICE_OPTIONS.map((d) => {
             const isActive = device === d.id;
             const isDisabled = d.id === "cuda" && !gpuInfo?.cudaAvailable;
-            const DeviceIcon = d.icon;
-
             return (
               <button
                 key={d.id}
@@ -362,44 +368,39 @@ const StepHardware = ({
                 role="radio"
                 aria-checked={isActive}
                 disabled={isDisabled}
-                className={`
-                  relative p-4 rounded-xl text-left transition-colors duration-150 group
-                  flex flex-col gap-2
-                  ${
-                    isActive
-                      ? "glass-strong border-primary/50"
-                      : isDisabled
-                        ? "glass-card opacity-50 cursor-not-allowed"
-                        : "glass-card hover:bg-muted/50"
-                  }
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
-                `}
+                className={cn(
+                  "relative p-4 rounded-md text-left transition-colors flex flex-col gap-2 border",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1",
+                  isActive
+                    ? "bg-accent-500/[0.06] border-accent-500/40"
+                    : isDisabled
+                      ? "border-border bg-secondary/20 opacity-50 cursor-not-allowed"
+                      : "border-border bg-secondary/30 hover:bg-secondary/60"
+                )}
                 onClick={() => !isDisabled && handleDeviceSelect(d.id)}
               >
                 <div className="flex items-center justify-between w-full">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    isActive ? "bg-primary/20" : "bg-secondary/50"
-                  }`}>
-                    <DeviceIcon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                  </div>
+                  <span
+                    className={cn(
+                      "font-display text-sm font-medium tracking-tight",
+                      isActive ? "text-cream" : "text-cream"
+                    )}
+                  >
+                    {d.label}
+                  </span>
                   {isActive && (
-                    <div
-                      className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_currentColor]"
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-accent-500 flex-shrink-0"
                       aria-hidden="true"
                     />
                   )}
                 </div>
-                <div>
-                  <span className={`font-medium text-sm block ${isActive ? "text-primary" : "text-foreground"}`}>
-                    {d.label}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/70">
-                    {d.desc}
-                  </span>
-                </div>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream-muted/60">
+                  {d.desc}
+                </span>
                 {isDisabled && (
-                  <span className="text-[9px] text-amber-500 mt-auto">
-                    Unavailable
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-amber-500/80 mt-auto">
+                    unavailable
                   </span>
                 )}
               </button>
@@ -408,201 +409,236 @@ const StepHardware = ({
         </div>
 
         {deviceError && (
-          <p className="text-sm text-destructive flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
+          <p className="font-mono text-[11px] text-destructive flex items-center gap-2 border-l-2 border-destructive/40 pl-3 py-1">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />
             {deviceError}
           </p>
         )}
 
-        {/* cuDNN Download Section */}
         {showDownloadButton && (
-          <div className="glass-card p-4 space-y-3">
+          <div className="border border-amber-500/30 bg-amber-500/[0.03] rounded-md p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
-              <span className="text-sm font-medium text-foreground">GPU Acceleration Required</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-amber-500/90">
+                gpu acceleration available
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Download NVIDIA CUDA libraries (cuDNN + cuBLAS) to enable GPU acceleration.
+            <p className="text-xs text-cream-muted leading-relaxed">
+              Download NVIDIA CUDA libraries (cuDNN + cuBLAS) to enable GPU
+              acceleration.
             </p>
             <button
+              type="button"
               onClick={handleDownloadCudnn}
               disabled={downloading}
-              className="w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all text-sm font-medium disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 h-10 rounded-md bg-accent-500 text-zinc-950 hover:bg-accent-600 transition-colors text-sm font-medium disabled:opacity-50"
             >
               {downloading ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  {downloadProgress ? (
-                    <span>Downloading... {downloadProgress.percent}%</span>
-                  ) : (
-                    <span>Starting...</span>
-                  )}
+                  <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                  {downloadProgress
+                    ? `downloading… ${downloadProgress.percent}%`
+                    : "starting…"}
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  Download CUDA Libraries (~880MB)
+                  <Download className="w-4 h-4" strokeWidth={2.5} />
+                  Download CUDA libraries (~880 MB)
                 </>
               )}
             </button>
             {downloading && downloadProgress && (
-              <div className="space-y-1">
-                <div className="h-1.5 w-full bg-secondary/50 rounded-full overflow-hidden">
+              <div className="space-y-1.5">
+                <div className="h-1 w-full bg-secondary/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-primary transition-all duration-300 ease-out"
+                    className="h-full bg-accent-500 transition-[width] duration-300 ease-out"
                     style={{ width: `${downloadProgress.percent}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center">
-                  {formatBytes(downloadProgress.downloadedBytes)} / {formatBytes(downloadProgress.totalBytes)}
+                <p className="font-mono text-[10px] text-cream-muted/70 text-center">
+                  {formatBytes(downloadProgress.downloadedBytes)} /{" "}
+                  {formatBytes(downloadProgress.totalBytes)}
                 </p>
               </div>
             )}
             {downloadError && (
-              <p className="text-xs text-destructive text-center">{downloadError}</p>
+              <p className="font-mono text-[11px] text-destructive">
+                {downloadError}
+              </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Right side - Details panel */}
-      <div className="w-72 flex-shrink-0">
-        <div className="glass-card p-4 space-y-4 h-[400px] overflow-y-auto">
-          {/* Device Info Header */}
-          {selectedDevice && (
-            <>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg text-foreground">{selectedDevice.label}</h3>
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
-                    {selectedDevice.detail}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">{selectedDevice.desc}</p>
-              </div>
-
-              {/* Best for */}
-              <div className="space-y-1.5 py-3 border-y border-border/30">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <Target className="w-3.5 h-3.5" />
-                  Best for
-                </div>
-                <p className="text-xs text-foreground/80 leading-relaxed">
-                  {selectedDevice.bestFor}
-                </p>
-              </div>
-
-              {/* Description */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                  <Info className="w-3.5 h-3.5" />
-                  About
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  {selectedDevice.description}
-                </p>
-              </div>
-            </>
-          )}
-
-          {/* Hardware Status Section */}
-          <div className="space-y-3 pt-3 border-t border-border/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Hardware Status</span>
-              <span
-                className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                  gpuInfo?.cudaAvailable
-                    ? "bg-green-500/10 text-green-500"
-                    : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {gpuInfo?.cudaAvailable
-                  ? "Ready"
-                  : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
-                    ? "Setup Needed"
-                    : "CPU Mode"}
-              </span>
-            </div>
-
-            {/* GPU Details */}
-            {gpuInfo?.gpuName ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary/30">
-                  <HardDrive className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground">GPU</p>
-                    <p className="text-xs font-medium text-foreground truncate" title={gpuInfo.gpuName}>
-                      {gpuInfo.gpuName}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2.5 rounded-lg bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">CUDA</p>
-                    <p className={`text-xs font-medium ${gpuInfo.cudaAvailable ? "text-green-500" : "text-muted-foreground"}`}>
-                      {gpuInfo.cudaAvailable ? "Available" : "Unavailable"}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground">cuDNN</p>
-                    <p className={`text-xs font-medium ${gpuInfo.cudnnAvailable ? "text-green-500" : "text-amber-500"}`}>
-                      {gpuInfo.cudnnAvailable ? "Installed" : "Missing"}
-                    </p>
-                  </div>
-                </div>
-
-                {gpuInfo.supportedComputeTypes && gpuInfo.supportedComputeTypes.length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-secondary/30">
-                    <p className="text-[10px] text-muted-foreground mb-1">Compute Types</p>
-                    <div className="flex flex-wrap gap-1">
-                      {gpuInfo.supportedComputeTypes.map((ct) => (
-                        <span key={ct} className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                          {ct}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-secondary/30">
-                <Cpu className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Device</p>
-                  <p className="text-xs font-medium text-foreground">CPU Only</p>
-                </div>
-              </div>
-            )}
-
-            {/* Status message */}
-            <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
-              {gpuInfo?.cudaAvailable
-                ? "Your system is fully configured for GPU acceleration."
-                : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
-                  ? "Download CUDA libraries from the left panel to enable GPU acceleration."
-                  : "No compatible NVIDIA GPU detected. CPU transcription works well but is slower."}
-            </p>
-          </div>
-        </div>
-      </div>
+      <HardwareDetailsPanel device={device} gpuInfo={gpuInfo} />
     </div>
   );
 };
 
-// Rating bar component for speed/accuracy
-const RatingBar = ({ value, max = 5, label }: { value: number; max?: number; label: string }) => (
-  <div className="flex items-center gap-2">
-    <span className="text-xs text-muted-foreground w-16">{label}</span>
+function HardwareDetailsPanel({
+  device,
+  gpuInfo,
+}: {
+  device: string;
+  gpuInfo: GpuInfo | null;
+}) {
+  const selected = DEVICE_OPTIONS.find((d) => d.id === device);
+  const status = gpuInfo?.cudaAvailable
+    ? { label: "ready", tone: "accent" as const }
+    : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
+      ? { label: "setup needed", tone: "amber" as const }
+      : { label: "cpu mode", tone: "muted" as const };
+
+  return (
+    <div className="border border-border rounded-md bg-surface p-5 space-y-5 h-full overflow-y-auto min-h-0">
+      {selected && (
+        <>
+          <div className="space-y-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              selection
+            </p>
+            <h3 className="font-display text-lg font-medium text-cream tracking-tight leading-tight">
+              {selected.label}
+            </h3>
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream-muted/60">
+              {selected.detail}
+            </p>
+          </div>
+
+          <div className="space-y-1.5 pt-4 border-t border-border">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              best for
+            </p>
+            <p className="text-xs text-cream-muted leading-relaxed">
+              {selected.bestFor}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              about
+            </p>
+            <p className="text-[11px] text-cream-muted leading-relaxed">
+              {selected.description}
+            </p>
+          </div>
+        </>
+      )}
+
+      <div className="space-y-3 pt-4 border-t border-border">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+            hardware
+          </p>
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest",
+              status.tone === "accent" && "text-accent-500",
+              status.tone === "amber" && "text-amber-500",
+              status.tone === "muted" && "text-cream-muted/60"
+            )}
+          >
+            {status.label}
+          </span>
+        </div>
+
+        <dl className="font-mono text-[11px] grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+          {gpuInfo?.gpuName && (
+            <>
+              <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+                gpu
+              </dt>
+              <dd className="text-cream truncate" title={gpuInfo.gpuName}>
+                {gpuInfo.gpuName}
+              </dd>
+              <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+                cuda
+              </dt>
+              <dd
+                className={
+                  gpuInfo.cudaAvailable ? "text-accent-500" : "text-cream-muted"
+                }
+              >
+                {gpuInfo.cudaAvailable ? "available" : "unavailable"}
+              </dd>
+              <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+                cudnn
+              </dt>
+              <dd
+                className={
+                  gpuInfo.cudnnAvailable ? "text-accent-500" : "text-amber-500"
+                }
+              >
+                {gpuInfo.cudnnAvailable ? "installed" : "missing"}
+              </dd>
+            </>
+          )}
+          {!gpuInfo?.gpuName && (
+            <>
+              <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+                device
+              </dt>
+              <dd className="text-cream">cpu only</dd>
+            </>
+          )}
+        </dl>
+
+        {gpuInfo?.supportedComputeTypes &&
+          gpuInfo.supportedComputeTypes.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+                compute types
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {gpuInfo.supportedComputeTypes.map((ct) => (
+                  <span
+                    key={ct}
+                    className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-secondary/50 text-cream-muted"
+                  >
+                    {ct}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+        <p className="text-[11px] text-cream-muted/70 leading-relaxed pt-1">
+          {gpuInfo?.cudaAvailable
+            ? "Your system is fully configured for GPU acceleration."
+            : gpuInfo?.gpuName && !gpuInfo?.cudnnAvailable
+              ? "Download CUDA libraries from the left to enable GPU acceleration."
+              : "No compatible NVIDIA GPU detected. CPU transcription works well — just slower."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// STEP: MODEL
+// ============================================================================
+
+const RatingBar = ({
+  value,
+  max = 5,
+  label,
+}: {
+  value: number;
+  max?: number;
+  label: string;
+}) => (
+  <div className="flex items-center gap-3">
+    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream-muted/60 w-16 flex-shrink-0">
+      {label}
+    </span>
     <div className="flex gap-0.5 flex-1">
       {Array.from({ length: max }).map((_, i) => (
         <div
           key={i}
-          className={`h-1.5 flex-1 rounded-full transition-colors ${
-            i < value ? "bg-primary" : "bg-muted-foreground/20"
-          }`}
+          className={cn(
+            "h-1 flex-1 rounded-full",
+            i < value ? "bg-accent-500" : "bg-cream-muted/15"
+          )}
         />
       ))}
     </div>
@@ -627,41 +663,31 @@ const StepModel = ({
   gpuInfo: GpuInfo | null;
 }) => {
   const selectedModel = MODEL_OPTIONS.find((m) => m.id === model);
-  const categoryInfo = selectedModel ? MODEL_CATEGORIES[selectedModel.category] : null;
+  const categoryInfo = selectedModel
+    ? MODEL_CATEGORIES[selectedModel.category]
+    : null;
+  const resolvedDevice =
+    device === "auto" ? (gpuInfo?.cudaAvailable ? "cuda" : "cpu") : device;
 
-  // Compute the resolved device label for display
-  const resolvedDevice = device === "auto"
-    ? (gpuInfo?.cudaAvailable ? "CUDA" : "CPU")
-    : device.toUpperCase();
-
-  // Auto-switch language when selecting English-only model
   const handleModelSelect = (modelId: string) => {
     setModel(modelId);
-    if (isEnglishOnlyModel(modelId) && language !== "en") {
-      setLanguage("en");
-    }
+    if (isEnglishOnlyModel(modelId) && language !== "en") setLanguage("en");
   };
 
   return (
-    <div className="flex gap-6 w-full max-w-6xl">
-      {/* Left side - Model grid */}
-      <div className="flex-1 space-y-4">
-        <div className="glass-card p-1 max-w-sm">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 w-full max-w-6xl h-full min-h-0">
+      <div className="space-y-5 min-w-0 overflow-y-auto pr-2">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 mb-2">
+            language
+          </p>
           <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="h-11 text-sm bg-transparent border-0 rounded-lg px-4 focus:ring-0 focus:ring-offset-0">
-              <span className="flex items-center gap-3 w-full">
-                <Globe className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Language:</span>
-                <SelectValue />
-              </span>
+            <SelectTrigger className="h-10 bg-secondary/40 border-border hover:bg-secondary/60 transition-colors rounded-md max-w-sm">
+              <SelectValue />
             </SelectTrigger>
-            <SelectContent className="border-border/50 bg-popover/95 backdrop-blur-xl shadow-2xl rounded-xl max-h-[280px]">
+            <SelectContent className="max-h-[280px]">
               {options.languages.map((lang) => (
-                <SelectItem
-                  key={lang}
-                  value={lang}
-                  className="py-2.5 rounded-lg cursor-pointer"
-                >
+                <SelectItem key={lang} value={lang}>
                   {lang === "auto" ? "Auto-detect" : lang.toUpperCase()}
                 </SelectItem>
               ))}
@@ -669,29 +695,28 @@ const StepModel = ({
           </Select>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Cpu className="w-4 h-4" />
-              Processing Model
-            </span>
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                resolvedDevice === "CUDA"
-                  ? "bg-green-500/10 text-green-500"
-                  : "bg-muted text-muted-foreground"
-              }`}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              model
+            </p>
+            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-widest">
+              <span
+                className={
+                  resolvedDevice === "cuda"
+                    ? "text-accent-500"
+                    : "text-cream-muted/60"
+                }
+              >
                 {resolvedDevice}
               </span>
-              <span className="badge-glow !py-1 !px-2.5 !text-[10px]">
-                <Shield className="w-3 h-3" />
-                Local Only
-              </span>
+              <span className="text-cream-muted/30">·</span>
+              <span className="text-accent-500/80">local only</span>
             </div>
           </div>
 
           <div
-            className="grid grid-cols-4 gap-1.5"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2"
             role="radiogroup"
             aria-label="Select processing model"
           >
@@ -703,32 +728,27 @@ const StepModel = ({
                   type="button"
                   role="radio"
                   aria-checked={isActive}
-                  className={`
-                    relative p-2.5 rounded-md text-left transition-colors duration-150 group
-                    flex flex-col gap-0
-                    ${
-                      isActive
-                        ? "glass-strong border-primary/50"
-                        : "glass-card hover:bg-muted/50"
-                    }
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
-                  `}
+                  className={cn(
+                    "relative p-3 rounded-md text-left transition-colors flex flex-col gap-1 border",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1",
+                    isActive
+                      ? "bg-accent-500/[0.06] border-accent-500/40"
+                      : "border-border bg-secondary/30 hover:bg-secondary/60"
+                  )}
                   onClick={() => handleModelSelect(m.id)}
                 >
                   <div className="flex items-center justify-between w-full">
-                    <span
-                      className={`font-medium text-xs ${isActive ? "text-primary" : "text-foreground"}`}
-                    >
+                    <span className="font-display text-sm font-medium tracking-tight text-cream">
                       {m.label}
                     </span>
                     {isActive && (
-                      <div
-                        className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_6px_currentColor]"
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-accent-500 flex-shrink-0"
                         aria-hidden="true"
                       />
                     )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground/70">
+                  <span className="font-mono text-[10px] text-cream-muted/70">
                     {m.detail}
                   </span>
                 </button>
@@ -738,69 +758,72 @@ const StepModel = ({
         </div>
       </div>
 
-      {/* Right side - Model details card */}
       {selectedModel && (
-        <div className="w-72 flex-shrink-0">
-          <div className="glass-card p-4 space-y-4 h-[360px] overflow-y-auto">
-            {/* Header */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg text-foreground">{selectedModel.label}</h3>
-                {categoryInfo && (
-                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted/50 ${categoryInfo.color}`}>
-                    {categoryInfo.label}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">{selectedModel.desc}</p>
-            </div>
+        <div className="border border-border rounded-md bg-surface p-5 space-y-5 h-full overflow-y-auto min-h-0">
+          <div className="space-y-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 flex items-center justify-between">
+              <span>model</span>
+              {categoryInfo && (
+                <span
+                  className={cn(
+                    "normal-case tracking-normal text-[11px]",
+                    categoryInfo.color
+                  )}
+                >
+                  {categoryInfo.label}
+                </span>
+              )}
+            </p>
+            <h3 className="font-display text-lg font-medium text-cream tracking-tight leading-tight">
+              {selectedModel.label}
+            </h3>
+            <p className="text-xs text-cream-muted leading-relaxed">
+              {selectedModel.desc}
+            </p>
+          </div>
 
-            {/* Ratings */}
-            <div className="space-y-2 py-2 border-y border-border/30">
-              <RatingBar value={selectedModel.speed} label="Speed" />
-              <RatingBar value={selectedModel.accuracy} label="Accuracy" />
-            </div>
+          <div className="space-y-2 pt-4 border-t border-border">
+            <RatingBar value={selectedModel.speed} label="speed" />
+            <RatingBar value={selectedModel.accuracy} label="accuracy" />
+          </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{selectedModel.detail}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <HardDrive className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{selectedModel.size}</span>
-              </div>
-            </div>
+          <dl className="font-mono text-[11px] grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 pt-4 border-t border-border">
+            <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+              detail
+            </dt>
+            <dd className="text-cream">{selectedModel.detail}</dd>
+            <dt className="text-cream-muted/60 uppercase tracking-widest text-[9px] self-center">
+              size
+            </dt>
+            <dd className="text-cream">{selectedModel.size}</dd>
+          </dl>
 
-            {/* Best for */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Target className="w-3.5 h-3.5" />
-                Best for
-              </div>
-              <p className="text-xs text-foreground/80 leading-relaxed">
-                {selectedModel.bestFor}
-              </p>
-            </div>
+          <div className="space-y-1.5 pt-4 border-t border-border">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              best for
+            </p>
+            <p className="text-xs text-cream-muted leading-relaxed">
+              {selectedModel.bestFor}
+            </p>
+          </div>
 
-            {/* Description */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Info className="w-3.5 h-3.5" />
-                About
-              </div>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {selectedModel.description}
-              </p>
-            </div>
-
+          <div className="space-y-1.5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+              about
+            </p>
+            <p className="text-[11px] text-cream-muted leading-relaxed">
+              {selectedModel.description}
+            </p>
           </div>
         </div>
       )}
     </div>
   );
 };
+
+// ============================================================================
+// STEP: THEME
+// ============================================================================
 
 const StepTheme = ({
   theme,
@@ -813,13 +836,13 @@ const StepTheme = ({
   autoStart: boolean;
   setAutoStart: (b: boolean) => void;
 }) => (
-  <div className="space-y-8">
-    <fieldset>
-      <legend className="text-sm font-medium text-muted-foreground mb-4">
-        Interface Theme
+  <div className="space-y-8 max-w-md w-full">
+    <fieldset className="space-y-3">
+      <legend className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+        interface theme
       </legend>
       <div
-        className="grid grid-cols-3 gap-4 max-w-md"
+        className="grid grid-cols-3 gap-3"
         role="radiogroup"
         aria-label="Theme selection"
       >
@@ -831,99 +854,114 @@ const StepTheme = ({
               type="button"
               role="radio"
               aria-checked={isActive}
-              className={`
-                relative p-5 rounded-2xl flex flex-col items-center gap-4 transition-colors duration-150
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
-                ${
-                  isActive
-                    ? "glass-strong border-primary/50"
-                    : "glass-card"
-                }
-              `}
+              className={cn(
+                "relative p-5 rounded-md flex flex-col items-center gap-3 transition-colors border",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 focus-visible:ring-offset-1",
+                isActive
+                  ? "border-accent-500/40 bg-accent-500/[0.06]"
+                  : "border-border bg-secondary/30 hover:bg-secondary/60"
+              )}
               onClick={() => setTheme(opt.val as Settings["theme"])}
             >
               <div
-                className={`w-14 h-14 rounded-full border-2 shadow-sm ${
+                className={cn(
+                  "w-12 h-12 rounded-md border border-border",
                   opt.val === "light"
-                    ? "bg-[#faf8f5] border-gray-200"
+                    ? "bg-[#fafafa]"
                     : opt.val === "dark"
-                      ? "bg-[#050a0f] border-gray-700"
-                      : "bg-gradient-to-br from-[#faf8f5] to-[#050a0f] border-gray-400"
-                }`}
+                      ? "bg-[#09090b]"
+                      : "bg-gradient-to-br from-[#fafafa] to-[#09090b]"
+                )}
+                aria-hidden
               />
               <span
-                className={`text-sm font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}
+                className={cn(
+                  "font-mono text-[11px] uppercase tracking-widest",
+                  isActive ? "text-cream" : "text-cream-muted"
+                )}
               >
                 {opt.label}
               </span>
+              {isActive && (
+                <span
+                  className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-accent-500"
+                  aria-hidden
+                />
+              )}
             </button>
           );
         })}
       </div>
     </fieldset>
 
-    <div className="glass-card p-5 max-w-md transition-colors hover:shadow-md">
-      <label className="flex items-center justify-between cursor-pointer">
-        <div className="space-y-1">
-          <span className="block font-medium text-foreground flex items-center gap-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Auto-start VoiceFlow
-          </span>
-          <span className="block text-sm text-muted-foreground">
-            Launch instantly when Windows starts
-          </span>
-        </div>
-        <Switch
-          checked={autoStart}
-          onCheckedChange={setAutoStart}
-          className="data-[state=checked]:bg-primary"
-        />
-      </label>
+    <div className="border-t border-border" />
+
+    <div className="flex items-start justify-between gap-6">
+      <div className="flex-1 min-w-0">
+        <label
+          htmlFor="onboarding-autostart"
+          className="text-sm font-medium text-cream cursor-pointer"
+        >
+          Launch at login
+        </label>
+        <p className="text-xs text-cream-muted mt-1 leading-relaxed">
+          Start VoiceFlow when you sign in to your computer.
+        </p>
+      </div>
+      <Switch
+        id="onboarding-autostart"
+        checked={autoStart}
+        onCheckedChange={setAutoStart}
+        className="mt-0.5 flex-shrink-0"
+      />
     </div>
   </div>
 );
 
+// ============================================================================
+// STEP: FINAL
+// ============================================================================
+
 const StepFinal = () => (
-  <div className="space-y-6 max-w-lg">
-    <div className="glass-card p-8 text-center relative overflow-hidden">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-primary w-[200px] h-[200px] absolute -top-20 left-1/2 -translate-x-1/2 opacity-30" />
-      </div>
-
-      <div className="relative z-10">
-        <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-          <Keyboard className="w-8 h-8 text-primary" />
-        </div>
-
-        <p className="badge-glow mx-auto mb-6 w-fit">Global Shortcut</p>
-
-        <div className="flex items-center justify-center gap-4 mb-6">
-          <kbd className="min-w-[80px] py-3 rounded-xl bg-background border border-border/50 text-2xl font-bold text-foreground shadow-[0_4px_0_0_rgba(0,0,0,0.1)] dark:shadow-[0_4px_0_0_rgba(255,255,255,0.05)] transition-transform hover:translate-y-0.5 hover:shadow-[0_2px_0_0_rgba(0,0,0,0.1)]">
+  <div className="space-y-5 max-w-lg w-full">
+    <div className="border border-border rounded-md bg-surface p-8 space-y-5">
+      <div className="text-center space-y-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 flex items-center justify-center gap-2">
+          <Keyboard className="w-3 h-3 text-accent-500" strokeWidth={2.5} />
+          global shortcut
+        </p>
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <kbd className="min-w-[72px] py-2.5 rounded-md bg-secondary border border-border text-base font-mono font-medium text-cream">
             Ctrl
           </kbd>
-          <span className="text-xl text-muted-foreground/50">+</span>
-          <kbd className="min-w-[80px] py-3 rounded-xl bg-background border border-border/50 text-2xl font-bold text-foreground shadow-[0_4px_0_0_rgba(0,0,0,0.1)] dark:shadow-[0_4px_0_0_rgba(255,255,255,0.05)] transition-transform hover:translate-y-0.5 hover:shadow-[0_2px_0_0_rgba(0,0,0,0.1)]">
+          <span className="text-base text-cream-muted/40 font-mono">+</span>
+          <kbd className="min-w-[72px] py-2.5 rounded-md bg-secondary border border-border text-base font-mono font-medium text-cream">
             Win
           </kbd>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-cream-muted">
           Hold to record, release to transcribe.
         </p>
       </div>
     </div>
 
-    <div className="glass-card p-5 flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-        <Sparkles className="w-5 h-5 text-primary" />
-      </div>
-      <p className="text-sm text-muted-foreground leading-relaxed">
-        VoiceFlow runs quietly in the system tray. Press the shortcut anytime, anywhere to start dictating.
+    <div className="flex items-center gap-3 px-4 py-3 border-l-2 border-accent-500/40">
+      <Sparkles
+        className="w-4 h-4 text-accent-500 flex-shrink-0"
+        strokeWidth={2}
+      />
+      <p className="text-sm text-cream-muted leading-relaxed">
+        VoiceFlow runs quietly in your system tray. Press the shortcut anytime,
+        anywhere to start dictating.
       </p>
     </div>
   </div>
 );
 
-// Step configuration
+// ============================================================================
+// STEP CONFIGURATION
+// ============================================================================
+
 const STEPS_CONFIG = [
   {
     id: "welcome",
@@ -933,26 +971,26 @@ const STEPS_CONFIG = [
   },
   {
     id: "audio",
-    title: "Configure Audio",
+    title: "Configure audio",
     subtitle: "Select your microphone and test the input levels.",
     icon: Mic,
   },
   {
     id: "hardware",
-    title: "Hardware Setup",
+    title: "Hardware setup",
     subtitle: "Configure GPU acceleration for faster transcription.",
     icon: HardDrive,
   },
   {
     id: "model",
-    title: "Choose Model",
+    title: "Choose model",
     subtitle: "Select the AI model and language for transcription.",
     icon: Cpu,
   },
   {
     id: "download",
-    title: "Download Model",
-    subtitle: "Downloading your selected AI model for offline use.",
+    title: "Download model",
+    subtitle: "Pulling weights — first run only, cached locally.",
     icon: Download,
   },
   {
@@ -963,11 +1001,15 @@ const STEPS_CONFIG = [
   },
   {
     id: "final",
-    title: "You're All Set",
+    title: "You're all set",
     subtitle: "Start dictating with a simple keyboard shortcut.",
     icon: Check,
   },
 ];
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -977,15 +1019,15 @@ export function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  // Form state
   const [language, setLanguage] = useState("auto");
   const [model, setModel] = useState("tiny");
   const [autoStart, setAutoStart] = useState(true);
   const [retention] = useState(-1);
-  const [theme, setTheme] = useState<Settings["theme"]>("system");
+  const [theme, setTheme] = useState<Settings["theme"]>("dark");
   const [microphone, setMicrophone] = useState<number>(0);
   const [device, setDevice] = useState("auto");
   const [gpuInfo, setGpuInfo] = useState<GpuInfo | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -1012,7 +1054,6 @@ export function Onboarding() {
     load();
   }, []);
 
-  // Refresh GPU info (called after cuDNN download)
   const refreshGpuInfo = async () => {
     try {
       const gpuData = await api.getGpuInfo();
@@ -1022,19 +1063,13 @@ export function Onboarding() {
     }
   };
 
-  // Apply theme in real-time
   useEffect(() => {
     const root = document.documentElement;
     const isDark =
       theme === "system"
         ? window.matchMedia("(prefers-color-scheme: dark)").matches
         : theme === "dark";
-
-    if (isDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    root.classList.toggle("dark", isDark);
   }, [theme]);
 
   const handleFinish = async () => {
@@ -1063,45 +1098,24 @@ export function Onboarding() {
   const nextStep = () => setStep((s) => s + 1);
   const prevStep = () => setStep((s) => s - 1);
 
-  // Track if download is actively in progress
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  // Handle download state changes
   const handleDownloadStart = () => setIsDownloading(true);
   const handleDownloadComplete = () => setIsDownloading(false);
-
-  // Handle download cancellation - go back to model selection
   const handleDownloadCancel = () => {
     setIsDownloading(false);
     prevStep();
   };
 
-  // --- Render States ---
-
   if (loading) {
     return (
       <main
-        className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden"
+        className="min-h-screen flex items-center justify-center bg-background bg-dots"
         aria-busy="true"
       >
-        <div className="fixed inset-0 bg-grid opacity-20 pointer-events-none" />
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="orb orb-primary w-[400px] h-[400px] absolute top-1/4 -left-40 opacity-30" />
-          <div className="orb orb-secondary w-[300px] h-[300px] absolute bottom-1/4 -right-40 opacity-20" />
-        </div>
-
-        <div className="relative flex flex-col items-center gap-6 z-10">
-          <div className="w-16 h-16 rounded-2xl glass-strong flex items-center justify-center shadow-xl">
-            <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          </div>
-          <div className="text-center space-y-2">
-            <p className="text-lg font-medium text-foreground">
-              Initializing Voice<span className="headline-serif text-primary">Flow</span>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Preparing your experience...
-            </p>
-          </div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-8 h-8 rounded-full border-2 border-accent-500/30 border-t-accent-500 animate-spin" />
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-cream-muted/60">
+            initializing voiceflow…
+          </p>
         </div>
       </main>
     );
@@ -1109,32 +1123,25 @@ export function Onboarding() {
 
   if (error && !options) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-        <div className="fixed inset-0 bg-grid opacity-20 pointer-events-none" />
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="orb orb-accent w-[300px] h-[300px] absolute top-1/3 left-1/4 opacity-20" />
-        </div>
-
+      <main className="min-h-screen flex items-center justify-center bg-background bg-dots px-6">
         <div
-          className="relative glass-card p-8 max-w-md text-center shadow-2xl z-10"
+          className="border border-destructive/30 rounded-md bg-destructive/[0.03] p-8 max-w-md w-full text-center space-y-4"
           role="alert"
         >
-          <div className="w-14 h-14 rounded-2xl bg-destructive/10 flex items-center justify-center mx-auto mb-6">
-            <AlertCircle
-              className="w-7 h-7 text-destructive"
-              aria-hidden="true"
-            />
-          </div>
-          <h2 className="text-xl font-semibold text-foreground mb-2">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-destructive">
+            initialization failed
+          </p>
+          <h2 className="font-display text-xl font-medium text-cream tracking-tight">
             Something went wrong
           </h2>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          <Button
+          <p className="text-sm text-cream-muted leading-relaxed">{error}</p>
+          <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="rounded-xl w-full"
+            className="h-10 px-5 rounded-md border border-border bg-secondary/40 hover:bg-secondary/60 transition-colors font-mono text-xs uppercase tracking-widest text-cream-muted hover:text-cream"
           >
-            Try Again
-          </Button>
+            try again
+          </button>
         </div>
       </main>
     );
@@ -1206,121 +1213,123 @@ export function Onboarding() {
     }
   };
 
-
   return (
-    <main className="min-h-screen flex flex-col bg-background relative overflow-hidden selection:bg-primary/20">
-      {/* Ambient background */}
-      <div className="fixed inset-0 bg-grid opacity-15 pointer-events-none" />
-      <div
-        className="fixed inset-0 overflow-hidden pointer-events-none"
-        aria-hidden="true"
-      >
-        <div className="orb orb-primary w-[500px] h-[500px] absolute -top-40 -left-40 opacity-25" />
-        <div className="orb orb-secondary w-[400px] h-[400px] absolute top-1/2 -right-40 opacity-20" />
-        <div className="orb orb-accent w-[300px] h-[300px] absolute -bottom-20 left-1/3 opacity-15" />
-      </div>
-
-      {/* Error toast */}
+    <main className="h-screen flex flex-col bg-background bg-dots overflow-hidden">
       {error && options && (
         <div
           role="alert"
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 glass-strong text-destructive px-6 py-3 rounded-full flex items-center gap-3 shadow-lg"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 border border-destructive/30 bg-destructive/[0.05] backdrop-blur rounded-md px-4 py-2 flex items-center gap-3"
         >
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span className="text-sm font-medium">{error}</span>
+          <AlertCircle
+            className="w-4 h-4 flex-shrink-0 text-destructive"
+            strokeWidth={2}
+          />
+          <span className="font-mono text-xs text-destructive">{error}</span>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col relative z-10 p-8 md:p-12 lg:p-16">
+      <div className="flex-1 flex flex-col px-6 md:px-10 lg:px-16 py-6 min-h-0">
         {/* Progress indicator */}
-        <div className="flex justify-center gap-2 mb-12">
+        <div
+          className="flex justify-center gap-1.5 mb-6 flex-shrink-0"
+          aria-label={`Step ${step + 1} of ${STEPS_CONFIG.length}`}
+        >
           {STEPS_CONFIG.map((_, idx) => (
             <button
               key={idx}
+              type="button"
               onClick={() => idx < step && setStep(idx)}
               disabled={idx > step}
-              className={`h-1.5 rounded-full transition-all duration-500 ease-out ${
+              aria-label={`Go to step ${idx + 1}`}
+              className={cn(
+                "h-1 rounded-full transition-all duration-300",
                 idx === step
-                  ? "w-10 bg-primary"
+                  ? "w-8 bg-accent-500"
                   : idx < step
-                    ? "w-6 bg-primary/50 hover:bg-primary/70 cursor-pointer"
-                    : "w-2 bg-muted-foreground/20"
-              }`}
+                    ? "w-5 bg-accent-500/40 hover:bg-accent-500/60 cursor-pointer"
+                    : "w-1.5 bg-cream-muted/20"
+              )}
             />
           ))}
         </div>
 
         {/* Header */}
-        <header className="text-center mb-10 space-y-4">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
-            <StepIcon className="w-7 h-7 text-primary" />
-          </div>
-
-          <div className="space-y-2">
-            <span className="badge-glow">Step {step + 1} of {STEPS_CONFIG.length}</span>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
-              {currentStepConfig.title.split(" ")[0]}{" "}
-              <span className="headline-serif text-primary">
-                {currentStepConfig.title.split(" ").slice(1).join(" ")}
-              </span>
-            </h1>
-            <p className="text-muted-foreground font-light text-lg">
-              {currentStepConfig.subtitle}
-            </p>
-          </div>
+        <header className="text-center mb-8 flex-shrink-0 space-y-3 max-w-2xl mx-auto">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60 flex items-center justify-center gap-2">
+            <StepIcon
+              className="w-3 h-3 text-accent-500"
+              strokeWidth={2.5}
+            />
+            step {String(step + 1).padStart(2, "0")} / {String(STEPS_CONFIG.length).padStart(2, "0")}
+            <span className="text-cream-muted/30 mx-1">·</span>
+            <span>{currentStepConfig.id}</span>
+          </p>
+          <h1 className="font-display text-3xl md:text-4xl lg:text-5xl font-medium tracking-tight text-cream leading-[1.05]">
+            {(() => {
+              const words = currentStepConfig.title.split(" ");
+              const last = words[words.length - 1];
+              const rest = words.slice(0, -1).join(" ");
+              return (
+                <>
+                  {rest && <>{rest} </>}
+                  <span className="text-accent-500">{last}</span>
+                </>
+              );
+            })()}
+          </h1>
+          <p className="text-sm md:text-base text-cream-muted leading-relaxed max-w-xl mx-auto">
+            {currentStepConfig.subtitle}
+          </p>
         </header>
 
-        {/* Step Content - Fixed height to prevent layout shift */}
-        <div className="flex-1 flex items-start justify-center min-h-0 overflow-y-auto">
+        {/* Step Content */}
+        <div className="flex-1 flex items-center justify-center min-h-0 overflow-hidden">
           {renderStepContent()}
         </div>
 
-        {/* Navigation - Fixed at bottom */}
-        <div className="flex items-center justify-center gap-4 pt-6 flex-shrink-0">
+        {/* Navigation */}
+        <div className="flex items-center justify-center gap-3 pt-6 flex-shrink-0">
           {!isFirstStep && (
             <Button
               variant="ghost"
               size="lg"
               onClick={prevStep}
               disabled={isDownloading}
-              className="rounded-xl text-muted-foreground hover:text-foreground px-6"
+              className="rounded-md text-cream-muted hover:text-cream hover:bg-secondary/60 px-5"
             >
-              <ArrowLeft className="mr-2 w-4 h-4" />
+              <ArrowLeft className="mr-2 w-4 h-4" strokeWidth={2} />
               Back
             </Button>
           )}
 
-          <Button
-            variant="glow"
-            size="lg"
+          <button
+            type="button"
             onClick={isLastStep ? handleFinish : nextStep}
             disabled={saving || isDownloading}
-            className="rounded-xl min-w-[160px]"
+            className="h-11 px-6 rounded-md min-w-[160px] bg-accent-500 text-zinc-950 hover:bg-accent-600 transition-colors font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? (
               <>
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Saving...
+                <span className="w-3.5 h-3.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                Saving…
               </>
             ) : isLastStep ? (
               <>
-                Get Started
-                <Check className="w-4 h-4" />
+                Open dashboard
+                <Check className="w-4 h-4" strokeWidth={2.5} />
               </>
             ) : (
               <>
                 Continue
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
               </>
             )}
-          </Button>
+          </button>
         </div>
       </div>
 
-      {/* Footer */}
-      <p className="text-center text-xs text-muted-foreground/50 pb-6 relative z-10">
-        All processing happens locally on your device. Your voice never leaves your computer.
+      <p className="text-center font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/40 pb-6">
+        all processing happens locally · your voice never leaves your computer
       </p>
     </main>
   );

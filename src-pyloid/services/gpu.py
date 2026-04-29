@@ -30,6 +30,65 @@ CUDNN_DLLS = [
 # Cache for CUDA availability check result
 _cuda_available_cache: Optional[bool] = None
 _cudnn_path_added: bool = False
+_nvidia_preloaded: bool = False
+
+
+def _preload_nvidia_libs() -> None:
+    """
+    On Linux, pre-load CUDA shared libraries shipped by the nvidia-* pip
+    packages (e.g. nvidia-cublas-cu12) using RTLD_GLOBAL so ctranslate2's
+    dlopen("libcublas.so.12") resolves them.
+
+    The nvidia pip packages stash .so files under
+    site-packages/nvidia/<pkg>/lib/, which is not on the dynamic linker's
+    default search path. ctranslate2 4.x has no Linux-side init code that
+    fixes this, so libcublas appears unloadable at runtime — both in the
+    venv and in the PyInstaller-bundled AppImage (when --collect-all=nvidia
+    is used to ship the packages).
+
+    Pre-loading every .so under each nvidia/<pkg>/lib/ directory makes the
+    symbols globally visible, which is what subsequent dlopen() calls
+    inside libctranslate2 actually need.
+
+    No-op on non-Linux platforms and when the nvidia namespace isn't
+    importable.
+    """
+    global _nvidia_preloaded
+    if _nvidia_preloaded:
+        return
+    _nvidia_preloaded = True
+
+    if sys.platform == "win32":
+        return
+
+    try:
+        import nvidia  # namespace package created by nvidia-* pip wheels
+    except ImportError:
+        return
+
+    import ctypes
+    paths = list(getattr(nvidia, "__path__", []))
+    if not paths:
+        return
+
+    nvidia_root = paths[0]
+    for pkg in os.listdir(nvidia_root):
+        lib_dir = os.path.join(nvidia_root, pkg, "lib")
+        if not os.path.isdir(lib_dir):
+            continue
+        for so in os.listdir(lib_dir):
+            if ".so" not in so:
+                continue
+            so_path = os.path.join(lib_dir, so)
+            try:
+                ctypes.CDLL(so_path, mode=ctypes.RTLD_GLOBAL)
+            except OSError as e:
+                log.debug("Failed to preload nvidia lib", lib=so, error=str(e))
+
+
+# Preload on first import so libcublas etc. are resolvable for the rest
+# of the module's lifetime, including the _check_cudnn_available() probe.
+_preload_nvidia_libs()
 
 
 def _get_local_cuda_dir() -> Path:

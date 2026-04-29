@@ -1,8 +1,19 @@
 [project]
 name = "VoiceFlow"
-version = "1.4.0"
+version = "1.5.0"
 readme = "README.md"
-description = "Voice-to-text paste utility"
+description = "Offline voice-to-text dictation for Windows and Linux, using Whisper."
+keywords = ["voice-to-text", "dictation", "whisper", "speech-to-text", "offline", "linux", "wayland", "transcription", "stt", "faster-whisper", "privacy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Office/Business",
+]
 
 requires-python = ">=3.9"
 
@@ -19,10 +30,23 @@ dependencies = [
     "nvidia-cublas-cu12; sys_platform == 'linux'",
 ]
 
+[project.urls]
+Homepage = "https://get-voice-flow.vercel.app/"
+Repository = "https://github.com/infiniV/VoiceFlow"
+Issues = "https://github.com/infiniV/VoiceFlow/issues"
+Releases = "https://github.com/infiniV/VoiceFlow/releases"
+
 [dependency-groups]
 dev = [
     "pyloid-builder",
     "pyloid-watcher",
     "ruff",
     "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["src-pyloid/tests"]
+markers = [
+    "network: tests that hit huggingface.co (slow, opt-in via VOICEFLOW_NETWORK_TESTS=1)",
+    "big_model: tests that download multi-GB models (opt-in via VOICEFLOW_BIG_MODEL_TESTS=1)",
 ]

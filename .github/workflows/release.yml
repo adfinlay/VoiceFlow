@@ -77,12 +77,25 @@ jobs:
       - name: Build application
         run: pnpm run build
 
-      - name: Remove bundled PortAudio
+      - name: Remove bundled PortAudio and ALSA
         run: |
-          # Remove bundled PortAudio so the app uses the system's libportaudio
-          # which has PipeWire/PulseAudio backends. Ubuntu's PortAudio only has ALSA.
+          # Use the system's libportaudio (the Ubuntu-bundled copy is ALSA-only
+          # with no PipeWire/PulseAudio backend, so virtual devices are missing).
           rm -f ./dist/VoiceFlow/_internal/libportaudio*
-          echo "Removed bundled PortAudio (will use system library at runtime)"
+          # Use the system's libasound. The bundled copy has its ALSA plugin
+          # search path hardcoded at build time to the build host's layout
+          # (e.g. /usr/lib/x86_64-linux-gnu/alsa-lib on Ubuntu). On distros
+          # with a different layout (Arch: /usr/lib/alsa-lib) libasound can't
+          # find libasound_module_pcm_pipewire.so / pulse plugin, and PortAudio
+          # silently reports zero PipeWire/Pulse-routed input devices.
+          # Removing _internal/libasound* makes the dynamic linker fall through
+          # to the user's system libasound, which knows where its own plugins live.
+          # Do NOT delete av.libs/libasound-cfbebb71.so.2.0.0 — PyAV's libavdevice
+          # has that exact filename in its NEEDED list (different SONAME from
+          # libasound.so.2, so it doesn't conflict with the PortAudio side).
+          # Removing it crashes startup with ImportError on libasound-cfbebb71.
+          rm -f ./dist/VoiceFlow/_internal/libasound*
+          echo "Removed bundled PortAudio + ALSA (will use system libraries at runtime)"
 
       - name: Clear executable stack flags
         run: |

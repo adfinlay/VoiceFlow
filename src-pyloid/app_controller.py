@@ -384,6 +384,27 @@ class AppController:
         debug("Manual stop_recording called")
         self.hotkey_service.force_deactivate()
 
+    def manual_toggle_recording(self) -> dict:
+        """Toggle recording from a UI button - mirrors hotkey behaviour.
+
+        Returns {"recording": bool} reflecting the new state.
+        """
+        if self.hotkey_service.is_recording():
+            stopped = self.hotkey_service.manual_stop()
+            return {"recording": False, "changed": stopped}
+        if not self._popup_enabled:
+            warning("Manual recording ignored - popup disabled (onboarding)")
+            return {"recording": False, "changed": False, "error": "onboarding_active"}
+        started = self.hotkey_service.manual_start()
+        return {"recording": started, "changed": started}
+
+    def get_recording_state(self) -> dict:
+        """Return the current recording state for the UI."""
+        return {
+            "recording": self.hotkey_service.is_recording(),
+            "mode": self.hotkey_service.get_active_mode(),
+        }
+
     def start_test_recording(self):
         """Start recording for onboarding test (no hotkey needed)."""
         debug("Starting test recording")

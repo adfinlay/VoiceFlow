@@ -1,5 +1,20 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
+import {
+  Mic,
+  Cpu,
+  FolderOpen,
+  Trash2,
+  Hand,
+  ToggleRight,
+  HardDrive,
+  Sun,
+  Moon,
+  Monitor,
+  ExternalLink,
+} from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -8,29 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Globe,
-  Mic,
-  Cpu,
-  Zap,
-  Clock,
-  Palette,
-  FolderOpen,
-  Trash2,
-  FileAudio,
-  Keyboard,
-  Hand,
-  ToggleRight,
-  HardDrive,
-  Eye,
-  WholeWord,
-} from "lucide-react";
-import { api } from "@/lib/api";
-import type { Settings, Options, GpuInfo } from "@/lib/types";
-import { ModelDownloadModal } from "./ModelDownloadModal";
-import { HotkeyCapture } from "./HotkeyCapture";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -43,7 +35,62 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { api } from "@/lib/api";
+import type { Settings, Options, GpuInfo } from "@/lib/types";
+import { ModelDownloadModal } from "./ModelDownloadModal";
+import { HotkeyCapture } from "./HotkeyCapture";
 import { cn } from "@/lib/utils";
+
+// Hardcoded faster-whisper spec sheet. The backend exposes only model names,
+// so size/VRAM/speed/accuracy live here as the source of truth for the picker.
+type ModelMeta = {
+  sizeMb: number;
+  vram: string;
+  speed: 1 | 2 | 3 | 4 | 5;
+  accuracy: 1 | 2 | 3 | 4 | 5;
+  tagline: string;
+};
+
+const MODEL_META: Record<string, ModelMeta> = {
+  tiny:   { sizeMb: 75,   vram: "~1 GB",  speed: 5, accuracy: 1, tagline: "Fastest. Drafts and rough notes." },
+  base:   { sizeMb: 142,  vram: "~1 GB",  speed: 5, accuracy: 2, tagline: "Light footprint. Casual dictation." },
+  small:  { sizeMb: 466,  vram: "~2 GB",  speed: 4, accuracy: 3, tagline: "Balanced. Comfortable on CPU." },
+  medium: { sizeMb: 1500, vram: "~5 GB",  speed: 2, accuracy: 4, tagline: "More accurate. Heavier on resources." },
+  large:  { sizeMb: 2900, vram: "~10 GB", speed: 1, accuracy: 5, tagline: "Highest accuracy. Slowest." },
+  turbo:  { sizeMb: 1600, vram: "~6 GB",  speed: 4, accuracy: 5, tagline: "Fast and accurate. Recommended for GPU." },
+};
+
+const FALLBACK_META: ModelMeta = {
+  sizeMb: 0,
+  vram: "—",
+  speed: 3,
+  accuracy: 3,
+  tagline: "",
+};
+
+const THEME_ICONS: Record<string, React.ElementType> = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
+};
+
+const SECTIONS = [
+  { id: "transcription", num: "01", label: "transcription" },
+  { id: "behavior",      num: "02", label: "behavior" },
+  { id: "appearance",    num: "03", label: "appearance" },
+  { id: "data",          num: "04", label: "data" },
+  { id: "reset",         num: "05", label: "reset" },
+] as const;
+
+function formatModelSize(mb: number): string {
+  if (mb === 0) return "—";
+  if (mb < 1000) return `${mb} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+function shortenGpuName(name: string): string {
+  return name.replace("NVIDIA ", "").replace(" Laptop GPU", "");
+}
 
 export function SettingsTab() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -51,13 +98,18 @@ export function SettingsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Model download modal state
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [pendingModel, setPendingModel] = useState<string | null>(null);
 
-  // GPU info state
   const [gpuInfo, setGpuInfo] = useState<GpuInfo | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+
+  const [modelCacheDir, setModelCacheDir] = useState<string | null>(null);
+  const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
+
+  // settingsRef lets stable callbacks read fresh state without re-creating on every settings change
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const loadSettings = async () => {
     setLoading(true);
@@ -71,8 +123,8 @@ export function SettingsTab() {
       setSettings(settingsData);
       setOptions(optionsData);
       setGpuInfo(gpuData);
-    } catch (error) {
-      console.error("Failed to load settings:", error);
+    } catch (err) {
+      console.error("Failed to load settings:", err);
       setError("Failed to load settings. Please try again.");
       toast.error("Failed to load settings");
     } finally {
@@ -84,38 +136,64 @@ export function SettingsTab() {
     loadSettings();
   }, []);
 
-  const updateSetting = async <K extends keyof Settings>(
-    key: K,
-    value: Settings[K]
-  ) => {
-    if (!settings) return;
+  useEffect(() => {
+    api
+      .getModelCacheDir()
+      .then((res) => setModelCacheDir(res.path))
+      .catch(() => setModelCacheDir(null));
+  }, []);
 
-    const newSettings = { ...settings, [key]: value };
-    setSettings(newSettings);
+  useEffect(() => {
+    if (!options) return;
+    let cancelled = false;
+    const fetchAll = async () => {
+      const results = await Promise.all(
+        options.models.map(async (m) => {
+          try {
+            const info = await api.getModelInfo(m);
+            return [m, info.cached] as const;
+          } catch {
+            return [m, false] as const;
+          }
+        })
+      );
+      if (cancelled) return;
+      setModelStatus(Object.fromEntries(results));
+    };
+    fetchAll();
+    return () => {
+      cancelled = true;
+    };
+  }, [options]);
 
-    try {
-      await api.updateSettings({ [key]: value });
-      toast.success("Settings saved");
-    } catch (error) {
-      console.error("Failed to update setting:", error);
-      toast.error("Failed to save settings");
-      setSettings(settings); // Revert
-    }
-  };
+  const updateSetting = useCallback(
+    async <K extends keyof Settings>(key: K, value: Settings[K]) => {
+      const current = settingsRef.current;
+      if (!current) return;
+      const next = { ...current, [key]: value };
+      setSettings(next);
+      try {
+        await api.updateSettings({ [key]: value });
+        toast.success("Settings saved");
+      } catch (err) {
+        console.error("Failed to update setting:", err);
+        toast.error("Failed to save settings");
+        setSettings(current);
+      }
+    },
+    []
+  );
 
-  // Handle model change - check if download needed
   const handleModelChange = useCallback(
     async (newModel: string) => {
-      if (!settings) return;
-
+      const current = settingsRef.current;
+      if (!current) return;
+      if (newModel === current.model) return;
       try {
         const modelInfo = await api.getModelInfo(newModel);
-
         if (modelInfo.cached) {
-          // Model is cached, just update settings
           updateSetting("model", newModel);
         } else {
-          // Model needs download - show modal
           setPendingModel(newModel);
           setDownloadModalOpen(true);
         }
@@ -124,34 +202,31 @@ export function SettingsTab() {
         toast.error("Failed to check model status");
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
-    [settings]
+    [updateSetting]
   );
 
-  // Handle download complete
   const handleDownloadComplete = useCallback(
     (success: boolean) => {
       if (success && pendingModel) {
-        // Download succeeded, update settings
         updateSetting("model", pendingModel);
+        setModelStatus((prev) => ({ ...prev, [pendingModel]: true }));
       }
       setDownloadModalOpen(false);
       setPendingModel(null);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateSetting is stable within settings scope
-    [pendingModel]
+    [pendingModel, updateSetting]
   );
 
-  // Handle download cancel
   const handleDownloadCancel = useCallback(() => {
     setDownloadModalOpen(false);
     setPendingModel(null);
-    // Settings remain unchanged - dropdown still shows original model
   }, []);
 
-  // Hotkey validation
   const validateHotkey = useCallback(
-    async (hotkey: string, excludeField: "holdHotkey" | "toggleHotkey") => {
+    async (
+      hotkey: string,
+      excludeField: "holdHotkey" | "toggleHotkey"
+    ): Promise<{ valid: boolean; error: string | null }> => {
       try {
         const result = await api.validateHotkey(hotkey, excludeField);
         return { valid: result.valid, error: result.error };
@@ -162,521 +237,222 @@ export function SettingsTab() {
     []
   );
 
-  // Handle device change with validation
-  const handleDeviceChange = useCallback(
-    async (newDevice: string) => {
-      if (!settings) return;
-
-      setDeviceError(null);
-
-      // Validate the device selection
-      const validation = await api.validateDevice(newDevice);
-      if (!validation.valid) {
-        setDeviceError(validation.error);
-        toast.error(validation.error || "Invalid device selection");
-        return;
-      }
-
-      // Update the setting
-      const newSettings = { ...settings, device: newDevice };
-      setSettings(newSettings);
-
-      try {
-        await api.updateSettings({ device: newDevice });
-        // Refresh GPU info after device change
-        const gpuData = await api.getGpuInfo();
-        setGpuInfo(gpuData);
-        toast.success("Device updated - model will reload");
-      } catch (err) {
-        console.error("Failed to update device:", err);
-        toast.error("Failed to update device");
-        setSettings(settings); // Revert
-      }
-    },
-    [settings]
-  );
+  const handleDeviceChange = useCallback(async (newDevice: string) => {
+    const current = settingsRef.current;
+    if (!current) return;
+    setDeviceError(null);
+    const validation = await api.validateDevice(newDevice);
+    if (!validation.valid) {
+      setDeviceError(validation.error);
+      toast.error(validation.error || "Invalid device selection");
+      return;
+    }
+    setSettings({ ...current, device: newDevice });
+    try {
+      await api.updateSettings({ device: newDevice });
+      const gpuData = await api.getGpuInfo();
+      setGpuInfo(gpuData);
+      toast.success("Device updated — model will reload");
+    } catch (err) {
+      console.error("Failed to update device:", err);
+      toast.error("Failed to update device");
+      setSettings(current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!settings) return;
     const root = document.documentElement;
-    let isDark = false;
-    if (settings.theme === "system") {
-      isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    } else {
-      isDark = settings.theme === "dark";
-    }
-    if (isDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally watching only settings.theme, not the full settings object
+    const isDark =
+      settings.theme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        : settings.theme === "dark";
+    root.classList.toggle("dark", isDark);
   }, [settings?.theme]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen w-full bg-background/50 p-6 md:p-10 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          <p className="text-muted-foreground animate-pulse">
-            Loading preferences...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  if (loading) return <LoadingState />;
   if (error || !settings || !options) {
-    return (
-      <div className="min-h-screen w-full bg-background/50 p-6 md:p-10 flex items-center justify-center">
-        <div className="text-center py-20 px-10 glass-card space-y-4">
-          <p className="text-destructive font-medium text-lg">
-            {error || "Failed to load settings"}
-          </p>
-          <Button type="button" variant="outline" onClick={loadSettings}>
-            Try again
-          </Button>
-        </div>
-      </div>
-    );
+    return <ErrorState error={error} onRetry={loadSettings} />;
   }
-
-  const retentionEntries = Object.entries(options.retentionOptions);
 
   return (
-    <div className="min-h-screen w-full bg-background/50 relative overflow-x-hidden">
-      {/* Background effects */}
-      <div className="fixed inset-0 bg-grid opacity-20 pointer-events-none overflow-hidden" />
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-primary w-[400px] h-[400px] absolute -top-40 -right-40 opacity-20" />
-        <div className="orb orb-accent w-[300px] h-[300px] absolute bottom-20 -left-20 opacity-15" />
-      </div>
-
-      <div className="w-full max-w-[1600px] mx-auto p-6 md:p-10 space-y-10 relative z-10">
-        {/* Header */}
-        <div className="flex flex-col gap-2">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-foreground">
+    <div className="min-h-full w-full bg-background">
+      <div className="w-full max-w-4xl mx-auto px-6 md:px-10 py-10 md:py-16 space-y-16">
+        <header className="space-y-4">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream-muted/60">
+            ~/voiceflow/preferences
+          </p>
+          <h1 className="font-display text-4xl md:text-5xl font-medium tracking-tight text-cream leading-[1.05]">
             Settings
           </h1>
-          <p className="text-lg text-muted-foreground/80 font-light max-w-2xl">
-            Customize your voice experience. All preferences are saved locally.
+          <p className="text-sm text-cream-muted max-w-xl leading-relaxed">
+            Local-first by design. Every preference here lives on your machine in{" "}
+            <span className="font-mono text-cream">~/.VoiceFlow/</span>. Changes
+            save as you go.
           </p>
-        </div>
+          <SectionIndex />
+        </header>
 
-        {/* Divider */}
-        <div className="divider-gradient" />
-
-        {/* BENTO GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-6 lg:grid-cols-12 gap-6">
-          {/* 1. Language (Span 4) */}
-          <BentoSettingCard
-            title="Language"
-            description="Target language for transcription"
-            icon={Globe}
-            className="md:col-span-6 lg:col-span-4"
+        <Section
+          id="transcription"
+          index="01"
+          title="Transcription"
+          description="The pipeline that turns your voice into text — model, language, microphone, compute."
+        >
+          <SectionBlock
+            label="Model"
+            helper="Larger models are more accurate but slower and use more memory. Models download on first use."
           >
-            <Select
+            <ModelPicker
+              models={options.models}
+              currentModel={settings.model}
+              statuses={modelStatus}
+              onChange={handleModelChange}
+            />
+          </SectionBlock>
+
+          <SettingRow label="Language" helper="Auto-detect works for most cases.">
+            <SelectField
               value={settings.language}
-              onValueChange={(value) => updateSetting("language", value)}
-            >
-              <SelectTrigger className="mt-auto h-12 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.languages.map((lang) => (
-                  <SelectItem key={lang} value={lang}>
-                    {lang === "auto" ? "Auto-detect" : lang.toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </BentoSettingCard>
+              onChange={(v) => updateSetting("language", v)}
+              options={options.languages.map((l) => ({
+                value: l,
+                label: l === "auto" ? "Auto-detect" : l.toUpperCase(),
+              }))}
+            />
+          </SettingRow>
 
-          {/* 2. Model (Span 4) */}
-          <BentoSettingCard
-            title="AI Model"
-            description="Smaller is faster, larger is smarter"
-            icon={Cpu}
-            className="md:col-span-6 lg:col-span-4"
+          <SettingRow
+            label="Microphone"
+            helper="Audio capture device. Defaults to your system input."
           >
-            <Select
-              value={settings.model}
-              onValueChange={handleModelChange}
-            >
-              <SelectTrigger className="mt-auto h-12 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.models.map((model) => (
-                  <SelectItem key={model} value={model}>
-                    {model.charAt(0).toUpperCase() + model.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </BentoSettingCard>
-
-          {/* 3. Appearance (Span 4) */}
-          <BentoSettingCard
-            title="Theme"
-            description="Customize the interface look"
-            icon={Palette}
-            className="md:col-span-6 lg:col-span-4"
-          >
-            <Select
-              value={settings.theme}
-              onValueChange={(value) =>
-                updateSetting("theme", value as Settings["theme"])
-              }
-            >
-              <SelectTrigger className="mt-auto h-12 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.themeOptions.map((theme) => (
-                  <SelectItem key={theme} value={theme}>
-                    {theme.charAt(0).toUpperCase() + theme.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </BentoSettingCard>
-
-          {/* 4. Microphone (Span 6) */}
-          <BentoSettingCard
-            title="Microphone Input"
-            description="Select your preferred audio capture device"
-            icon={Mic}
-            className="md:col-span-6 lg:col-span-6"
-          >
-            <Select
+            <SelectField
               value={String(settings.microphone)}
-              onValueChange={(value) =>
-                updateSetting("microphone", Number(value))
-              }
-            >
-              <SelectTrigger className="mt-auto h-12 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <Mic className="w-4 h-4 opacity-50" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-1">Default System Mic</SelectItem>
-                {options.microphones.map((mic) => (
-                  <SelectItem key={mic.id} value={String(mic.id)}>
-                    {mic.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </BentoSettingCard>
+              onChange={(v) => updateSetting("microphone", Number(v))}
+              options={[
+                { value: "-1", label: "System default" },
+                ...options.microphones.map((m) => ({
+                  value: String(m.id),
+                  label: m.name,
+                })),
+              ]}
+              icon={Mic}
+            />
+          </SettingRow>
 
-          {/* 5. History Retention (Span 6) */}
-          <BentoSettingCard
-            title="Data Retention"
-            description="How long should we keep your transcriptions?"
-            icon={Clock}
-            className="md:col-span-6 lg:col-span-6"
+          <SectionBlock
+            label="Compute device"
+            helper="CPU is reliable everywhere. CUDA needs an NVIDIA GPU and cuDNN 9.x."
           >
-            <Select
-              value={String(settings.retention)}
-              onValueChange={(value) =>
-                updateSetting("retention", Number(value))
-              }
-            >
-              <SelectTrigger className="mt-auto h-12 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {retentionEntries.map(([label, days]) => (
-                  <SelectItem key={days} value={String(days)}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </BentoSettingCard>
-
-          {/* 6. Audio History (Span 6) */}
-          <BentoSettingCard
-            title="History Audio"
-            description="Optionally keep your dictation audio with each entry"
-            icon={FileAudio}
-            className="md:col-span-6 lg:col-span-6"
-          >
-            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
-              <Label
-                htmlFor="save-audio-history"
-                className="font-medium cursor-pointer"
-              >
-                Save dictation audio to History
-              </Label>
-              <Switch
-                id="save-audio-history"
-                checked={settings.saveAudioToHistory}
-                onCheckedChange={(checked) =>
-                  updateSetting("saveAudioToHistory", checked)
-                }
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Audio stays on your device. When enabled, History items show an Audio badge with playback.
-            </p>
-          </BentoSettingCard>
-
-          {/* Prepend Space */}
-          <BentoSettingCard
-            title="Prepend Space"
-            description="Add a leading space before each transcription"
-            icon={WholeWord}
-            className="md:col-span-6 lg:col-span-4"
-          >
-            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
-              <Label
-                htmlFor="prepend-space"
-                className="font-medium cursor-pointer"
-              >
-                Add space before text
-              </Label>
-              <Switch
-                id="prepend-space"
-                checked={settings.prependSpace}
-                onCheckedChange={(checked) =>
-                  updateSetting("prependSpace", checked)
-                }
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Useful for continuous dictation — prevents sentences from running together.
-            </p>
-          </BentoSettingCard>
-
-          {/* 7. Recording Indicator (Span 4) */}
-          <BentoSettingCard
-            title="Recording Indicator"
-            description="Floating popup that shows recording state"
-            icon={Eye}
-            className="md:col-span-6 lg:col-span-4"
-          >
-            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
-              <Label
-                htmlFor="show-popup"
-                className="font-medium cursor-pointer"
-              >
-                Show floating indicator
-              </Label>
-              <Switch
-                id="show-popup"
-                checked={settings.showPopup}
-                onCheckedChange={(checked) =>
-                  updateSetting("showPopup", checked)
-                }
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-3">
-              Disable to hide the small pill that appears at the bottom of your screen. Recording still works via hotkey.
-            </p>
-          </BentoSettingCard>
-
-          {/* 8. System (Auto Start) (Span 4) */}
-          <BentoSettingCard
-            title="System"
-            description="Startup behavior"
-            icon={Zap}
-            className="md:col-span-6 lg:col-span-4"
-          >
-            <div className="mt-auto flex items-center justify-between p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors">
-              <Label
-                htmlFor="auto-start"
-                className="font-medium cursor-pointer"
-              >
-                Start with Windows
-              </Label>
-              <Switch
-                id="auto-start"
-                checked={settings.autoStart}
-                onCheckedChange={(checked) =>
-                  updateSetting("autoStart", checked)
-                }
-              />
-            </div>
-          </BentoSettingCard>
-
-          {/* 8. Data Folder (Span 4) */}
-          <BentoSettingCard
-            title="Storage"
-            description="Local data location"
-            icon={FolderOpen}
-            className="md:col-span-6 lg:col-span-4"
-          >
-            <div className="mt-auto">
-              <button
-                onClick={() => api.openDataFolder()}
-                className="w-full flex items-center justify-center gap-2 h-12 rounded-xl border border-border/50 bg-background/50 hover:bg-primary/5 hover:border-primary/30 hover:text-primary transition-all text-sm font-medium text-muted-foreground"
-              >
-                <FolderOpen className="w-4 h-4" />
-                Open Data Folder
-              </button>
-            </div>
-          </BentoSettingCard>
-
-          {/* 8. Keyboard Shortcuts (Full Width) */}
-          <BentoSettingCard
-            title="Keyboard Shortcuts"
-            description="Customize recording hotkeys"
-            icon={Keyboard}
-            className="md:col-span-6 lg:col-span-12"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Hold Mode */}
-              <div className="space-y-4 p-4 rounded-xl bg-secondary/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Hand className="w-5 h-5 text-primary" />
-                    <div>
-                      <h4 className="font-medium">Hold Mode</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Hold to record, release to stop
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={settings.holdHotkeyEnabled}
-                    onCheckedChange={(checked) =>
-                      updateSetting("holdHotkeyEnabled", checked)
-                    }
-                  />
-                </div>
-
-                <HotkeyCapture
-                  value={settings.holdHotkey}
-                  onChange={(hotkey) => updateSetting("holdHotkey", hotkey)}
-                  onValidate={(hotkey) => validateHotkey(hotkey, "holdHotkey")}
-                  disabled={!settings.holdHotkeyEnabled}
-                />
-              </div>
-
-              {/* Toggle Mode */}
-              <div className="space-y-4 p-4 rounded-xl bg-secondary/20">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <ToggleRight className="w-5 h-5 text-primary" />
-                    <div>
-                      <h4 className="font-medium">Toggle Mode</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Press once to start, press again to stop
-                      </p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={settings.toggleHotkeyEnabled}
-                    onCheckedChange={(checked) =>
-                      updateSetting("toggleHotkeyEnabled", checked)
-                    }
-                  />
-                </div>
-
-                <HotkeyCapture
-                  value={settings.toggleHotkey}
-                  onChange={(hotkey) => updateSetting("toggleHotkey", hotkey)}
-                  onValidate={(hotkey) => validateHotkey(hotkey, "toggleHotkey")}
-                  disabled={!settings.toggleHotkeyEnabled}
-                />
-              </div>
-            </div>
-          </BentoSettingCard>
-
-          {/* Advanced Section Divider */}
-          <div className="md:col-span-6 lg:col-span-12 pt-4">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground mb-1">
-              Advanced
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Hardware and performance settings
-            </p>
-          </div>
-
-          {/* 9. GPU / Device (Span 6) */}
-          <BentoSettingCard
-            title="Compute Device"
-            description="Choose CPU or GPU for transcription"
-            icon={Cpu}
-            className="md:col-span-6 lg:col-span-6"
-          >
-            <Select
+            <ComputePanel
               value={settings.device}
-              onValueChange={handleDeviceChange}
-            >
-              <SelectTrigger className="h-12 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.deviceOptions.map((device) => (
-                  <SelectItem
-                    key={device}
-                    value={device}
-                    disabled={device === "cuda" && !gpuInfo?.cudaAvailable}
-                  >
-                    {device === "auto"
-                      ? "Auto (Recommended)"
-                      : device === "cuda"
-                        ? `CUDA${!gpuInfo?.cudaAvailable ? " (Unavailable)" : ""}`
-                        : "CPU"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {deviceError && (
-              <p className="text-xs text-destructive mt-2">{deviceError}</p>
-            )}
-            {gpuInfo && (
-              <div className="mt-4 p-3 rounded-xl bg-secondary/30 space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className={
-                    gpuInfo.cudaAvailable
-                      ? "text-green-500"
-                      : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
-                        ? "text-amber-500"
-                        : "text-muted-foreground"
-                  }>
-                    {gpuInfo.cudaAvailable
-                      ? "CUDA Available"
-                      : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
-                        ? "cuDNN Missing"
-                        : "CPU Only"}
-                  </span>
-                </div>
-                {gpuInfo.gpuName && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">GPU</span>
-                    <span className="text-foreground truncate ml-2 max-w-[180px]" title={gpuInfo.gpuName}>
-                      {gpuInfo.gpuName}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Active</span>
-                  <span className="text-foreground">
-                    {gpuInfo.currentDevice.toUpperCase()} ({gpuInfo.currentComputeType})
-                  </span>
-                </div>
-                {gpuInfo.gpuName && !gpuInfo.cudnnAvailable && (
-                  <p className="text-xs text-amber-500 pt-1">
-                    Install cuDNN 9.x for GPU acceleration
-                  </p>
-                )}
-              </div>
-            )}
-          </BentoSettingCard>
+              gpuInfo={gpuInfo}
+              error={deviceError}
+              options={options.deviceOptions}
+              onChange={handleDeviceChange}
+            />
+          </SectionBlock>
+        </Section>
 
-          {/* 10. Danger Zone (Span 4) */}
-          <DangerZoneCard />
-        </div>
+        <Section
+          id="behavior"
+          index="02"
+          title="Behavior"
+          description="How VoiceFlow reacts when you speak — hotkeys, indicators, and small touches."
+        >
+          <SectionBlock
+            label="Hotkeys"
+            helper="Bind a global hold or toggle shortcut. Use either, both, or neither."
+          >
+            <HotkeysPanel
+              settings={settings}
+              onUpdate={updateSetting}
+              onValidate={validateHotkey}
+            />
+          </SectionBlock>
+
+          <ToggleRow
+            label="Floating recording indicator"
+            helper="Shows a small pill at the bottom of your screen while recording. Hide it for a quieter experience — recording still works."
+            checked={settings.showPopup}
+            onChange={(v) => updateSetting("showPopup", v)}
+          />
+          <ToggleRow
+            label="Save dictation audio"
+            helper="Keep the original audio with each transcription so you can play it back. Stays on your device."
+            checked={settings.saveAudioToHistory}
+            onChange={(v) => updateSetting("saveAudioToHistory", v)}
+          />
+          <ToggleRow
+            label="Prepend space"
+            helper="Adds a leading space before pasted text. Prevents sentences from running together when you dictate continuously."
+            checked={settings.prependSpace}
+            onChange={(v) => updateSetting("prependSpace", v)}
+          />
+          <ToggleRow
+            label="Launch at login"
+            helper="Start VoiceFlow when you sign in to your computer."
+            checked={settings.autoStart}
+            onChange={(v) => updateSetting("autoStart", v)}
+          />
+        </Section>
+
+        <Section
+          id="appearance"
+          index="03"
+          title="Appearance"
+          description="Light, dark, or follow your operating system."
+        >
+          <ThemePicker
+            value={settings.theme}
+            options={options.themeOptions}
+            onChange={(v) => updateSetting("theme", v as Settings["theme"])}
+          />
+        </Section>
+
+        <Section
+          id="data"
+          index="04"
+          title="Data"
+          description="What gets kept, where it lives, and for how long."
+        >
+          <SectionBlock
+            label="Retention"
+            helper="History entries older than this are automatically removed."
+          >
+            <Segmented
+              value={String(settings.retention)}
+              options={Object.entries(options.retentionOptions).map(
+                ([label, days]) => ({ value: String(days), label })
+              )}
+              onChange={(v) => updateSetting("retention", Number(v))}
+            />
+          </SectionBlock>
+
+          <SectionBlock label="Storage paths" helper="Files VoiceFlow keeps on disk.">
+            <StoragePaths modelCacheDir={modelCacheDir} />
+          </SectionBlock>
+        </Section>
+
+        <Section
+          id="reset"
+          index="05"
+          title="Reset"
+          tone="danger"
+          description="Wipe local state and start over. None of this can be undone."
+        >
+          <DangerZone />
+        </Section>
+
+        <footer className="pt-8 border-t border-border flex items-center justify-between font-mono text-[11px] text-cream-muted/60">
+          <span>VoiceFlow · local · open-source</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
+            preferences saved
+          </span>
+        </footer>
       </div>
 
-      {/* Model Download Modal */}
       {pendingModel && (
         <ModelDownloadModal
           open={downloadModalOpen}
@@ -689,52 +465,717 @@ export function SettingsTab() {
   );
 }
 
-// BENTO CARD COMPONENT
-function BentoSettingCard({
-  children,
-  title,
-  description,
-  icon: Icon,
-  className,
-  iconClass = "text-primary bg-primary/10",
-}: {
-  children: React.ReactNode;
-  title: string;
-  description: string;
-  icon: React.ElementType;
-  className?: string;
-  iconClass?: string;
-}) {
+function LoadingState() {
   return (
-    <div
-      className={cn(
-        "group glass-card flex flex-col justify-between p-6 transition-colors duration-150",
-        className
-      )}
-    >
-      <div className="flex items-start gap-4 mb-6">
-        <div
-          className={cn(
-            "p-2.5 rounded-xl border border-primary/20",
-            iconClass
-          )}
-        >
-          <Icon className="w-5 h-5" />
-        </div>
-        <div className="space-y-1 flex-1">
-          <h3 className="text-base font-semibold tracking-tight">{title}</h3>
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {description}
-          </p>
-        </div>
+    <div className="min-h-screen w-full bg-background flex items-center justify-center px-6">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-8 h-8 rounded-full border-2 border-accent-500/30 border-t-accent-500 animate-spin" />
+        <p className="font-mono text-[11px] text-cream-muted/60 uppercase tracking-widest">
+          loading preferences…
+        </p>
       </div>
-      <div className="flex-grow flex flex-col justify-end">{children}</div>
     </div>
   );
 }
 
-// DANGER ZONE CARD WITH DELETE OPTIONS
-function DangerZoneCard() {
+function ErrorState({
+  error,
+  onRetry,
+}: {
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="min-h-screen w-full bg-background flex items-center justify-center px-6">
+      <div className="text-center space-y-4 max-w-sm">
+        <p className="font-mono text-[11px] uppercase tracking-widest text-destructive">
+          read failed
+        </p>
+        <p className="text-cream">{error || "Failed to load settings"}</p>
+        <Button type="button" variant="outline" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SectionIndex() {
+  const handleClick = (id: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    document
+      .getElementById(id)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  return (
+    <nav
+      aria-label="Settings sections"
+      className="flex flex-wrap gap-x-4 gap-y-2 font-mono text-[11px] pt-2"
+    >
+      {SECTIONS.map((s, i) => (
+        <span key={s.id} className="flex items-center gap-4">
+          {i > 0 && <span className="text-cream-muted/30">/</span>}
+          <button
+            type="button"
+            onClick={handleClick(s.id)}
+            className="text-cream-muted/60 hover:text-accent-500 transition-colors"
+          >
+            <span className="text-cream-muted/40">{s.num}</span>{" "}
+            <span className="uppercase tracking-widest">{s.label}</span>
+          </button>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
+function Section({
+  id,
+  index,
+  title,
+  description,
+  tone = "default",
+  children,
+}: {
+  id: string;
+  index: string;
+  title: string;
+  description?: string;
+  tone?: "default" | "danger";
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-8 space-y-8">
+      <div className="space-y-2">
+        <p
+          className={cn(
+            "font-mono text-[10px] uppercase tracking-[0.25em]",
+            tone === "danger" ? "text-destructive/80" : "text-cream-muted/60"
+          )}
+        >
+          {index} / {title}
+        </p>
+        <h2
+          className={cn(
+            "font-display text-2xl md:text-3xl font-medium tracking-tight leading-tight",
+            tone === "danger" ? "text-destructive" : "text-cream"
+          )}
+        >
+          {title}
+        </h2>
+        {description && (
+          <p className="text-sm text-cream-muted max-w-2xl leading-relaxed">
+            {description}
+          </p>
+        )}
+      </div>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function SectionBlock({
+  label,
+  helper,
+  children,
+}: {
+  label?: string;
+  helper?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="py-5 border-t border-border first:border-t-0 space-y-3">
+      {(label || helper) && (
+        <div className="space-y-1">
+          {label && <p className="text-sm font-medium text-cream">{label}</p>}
+          {helper && (
+            <p className="text-xs text-cream-muted leading-relaxed max-w-2xl">
+              {helper}
+            </p>
+          )}
+        </div>
+      )}
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  helper,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="py-5 border-t border-border first:border-t-0 flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-8">
+      <div className="md:max-w-md">
+        <p className="text-sm font-medium text-cream">{label}</p>
+        {helper && (
+          <p className="text-xs text-cream-muted mt-1 leading-relaxed">
+            {helper}
+          </p>
+        )}
+      </div>
+      <div className="md:flex-shrink-0 md:w-72">{children}</div>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  helper,
+  checked,
+  onChange,
+}: {
+  label: string;
+  helper?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const id = `toggle-${label.toLowerCase().replace(/\s+/g, "-")}`;
+  return (
+    <div className="py-4 border-t border-border first:border-t-0 flex items-start justify-between gap-6">
+      <div className="flex-1 min-w-0">
+        <Label
+          htmlFor={id}
+          className="text-sm font-medium text-cream cursor-pointer"
+        >
+          {label}
+        </Label>
+        {helper && (
+          <p className="text-xs text-cream-muted mt-1 leading-relaxed max-w-2xl">
+            {helper}
+          </p>
+        )}
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        className="mt-0.5 flex-shrink-0"
+      />
+    </div>
+  );
+}
+
+function SelectField({
+  value,
+  onChange,
+  options,
+  icon: Icon,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  icon?: React.ElementType;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-10 rounded-md font-mono text-sm bg-secondary/40 border-border hover:bg-secondary/60 transition-colors">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="w-3.5 h-3.5 text-cream-muted/70" />}
+          <SelectValue />
+        </div>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem
+            key={o.value}
+            value={o.value}
+            className="font-mono text-sm"
+          >
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ModelPicker({
+  models,
+  currentModel,
+  statuses,
+  onChange,
+}: {
+  models: string[];
+  currentModel: string;
+  statuses: Record<string, boolean>;
+  onChange: (m: string) => void;
+}) {
+  return (
+    <div className="border border-border rounded-md overflow-hidden bg-surface">
+      {models.map((model, i) => {
+        const meta = MODEL_META[model] ?? FALLBACK_META;
+        const cached = statuses[model];
+        const isActive = model === currentModel;
+        const cacheState =
+          cached === undefined ? "unknown" : cached ? "cached" : "absent";
+        return (
+          <button
+            key={model}
+            type="button"
+            onClick={() => onChange(model)}
+            aria-pressed={isActive}
+            className={cn(
+              "w-full text-left transition-colors flex items-stretch group",
+              i > 0 && "border-t border-border",
+              isActive
+                ? "bg-accent-500/[0.04] hover:bg-accent-500/[0.06]"
+                : "hover:bg-secondary/40"
+            )}
+          >
+            <div
+              className={cn(
+                "w-1 flex-shrink-0 transition-colors",
+                isActive ? "bg-accent-500" : "bg-transparent"
+              )}
+              aria-hidden
+            />
+            <div className="flex-1 flex items-center gap-4 px-5 py-4 min-w-0">
+              <ModelStatusDot active={isActive} cached={cacheState} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="font-display text-base font-medium tracking-tight text-cream">
+                    {model}
+                  </span>
+                  {cacheState === "absent" && (
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-cream-muted/60">
+                      ↓ download required
+                    </span>
+                  )}
+                  {isActive && (
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-accent-500">
+                      active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-cream-muted mt-1 truncate">
+                  {meta.tagline}
+                </p>
+              </div>
+              <div className="hidden sm:flex items-center gap-6 flex-shrink-0">
+                <ModelMetaCol label="size" value={formatModelSize(meta.sizeMb)} />
+                <ModelMetaCol label="vram" value={meta.vram} />
+                <DotMeter label="speed" value={meta.speed} />
+                <DotMeter label="accuracy" value={meta.accuracy} />
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModelStatusDot({
+  active,
+  cached,
+}: {
+  active: boolean;
+  cached: "cached" | "absent" | "unknown";
+}) {
+  if (active) {
+    return (
+      <span
+        className="relative flex-shrink-0 inline-flex items-center justify-center w-3 h-3"
+        aria-hidden
+      >
+        <span className="absolute inset-0 rounded-full bg-accent-500" />
+        <span className="absolute inset-0 rounded-full bg-accent-500 animate-ping opacity-40" />
+      </span>
+    );
+  }
+  if (cached === "cached") {
+    return (
+      <span
+        className="w-3 h-3 rounded-full border border-cream-muted/40 flex-shrink-0"
+        aria-hidden
+      />
+    );
+  }
+  if (cached === "absent") {
+    return (
+      <span
+        className="w-3 h-3 rounded-full border border-dashed border-cream-muted/30 flex-shrink-0"
+        aria-hidden
+      />
+    );
+  }
+  return <span className="w-3 h-3 flex-shrink-0" aria-hidden />;
+}
+
+function ModelMetaCol({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-end gap-1 min-w-[64px]">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-cream-muted/50">
+        {label}
+      </span>
+      <span className="font-mono text-[11px] text-cream-muted">{value}</span>
+    </div>
+  );
+}
+
+function DotMeter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-col items-end gap-1 min-w-[60px]">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-cream-muted/50">
+        {label}
+      </span>
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span
+            key={i}
+            className={cn(
+              "w-1 h-1 rounded-full",
+              i <= value ? "bg-accent-500" : "bg-cream-muted/20"
+            )}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ComputePanel({
+  value,
+  gpuInfo,
+  error,
+  options,
+  onChange,
+}: {
+  value: string;
+  gpuInfo: GpuInfo | null;
+  error: string | null;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {options.map((d) => {
+          const isActive = value === d;
+          const disabled = d === "cuda" && !gpuInfo?.cudaAvailable;
+          const label = d === "auto" ? "Auto" : d === "cuda" ? "CUDA" : "CPU";
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => !disabled && onChange(d)}
+              disabled={disabled}
+              aria-pressed={isActive}
+              className={cn(
+                "h-9 px-4 rounded-md border font-mono text-xs uppercase tracking-widest transition-colors",
+                isActive
+                  ? "bg-accent-500/10 border-accent-500/40 text-accent-500"
+                  : disabled
+                    ? "bg-secondary/20 border-border text-cream-muted/30 cursor-not-allowed"
+                    : "bg-secondary/30 border-border text-cream-muted hover:bg-secondary/60 hover:text-cream"
+              )}
+            >
+              {label}
+              {d === "cuda" && !gpuInfo?.cudaAvailable && (
+                <span className="ml-2 normal-case tracking-normal text-cream-muted/40">
+                  unavailable
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="font-mono text-[11px] text-destructive">{error}</p>
+      )}
+      {gpuInfo && (
+        <dl className="font-mono text-[12px] grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 pt-2">
+          <dt className="text-cream-muted/60 uppercase tracking-widest text-[10px] self-center">
+            status
+          </dt>
+          <dd
+            className={cn(
+              gpuInfo.cudaAvailable
+                ? "text-accent-500"
+                : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
+                  ? "text-amber-500"
+                  : "text-cream-muted"
+            )}
+          >
+            {gpuInfo.cudaAvailable
+              ? "cuda available"
+              : gpuInfo.gpuName && !gpuInfo.cudnnAvailable
+                ? "cudnn missing"
+                : "cpu only"}
+          </dd>
+          {gpuInfo.gpuName && (
+            <>
+              <dt className="text-cream-muted/60 uppercase tracking-widest text-[10px] self-center">
+                gpu
+              </dt>
+              <dd className="text-cream truncate" title={gpuInfo.gpuName}>
+                {shortenGpuName(gpuInfo.gpuName)}
+              </dd>
+            </>
+          )}
+          <dt className="text-cream-muted/60 uppercase tracking-widest text-[10px] self-center">
+            active
+          </dt>
+          <dd className="text-cream">
+            {gpuInfo.currentDevice} · {gpuInfo.currentComputeType}
+          </dd>
+        </dl>
+      )}
+      {gpuInfo?.gpuName && !gpuInfo.cudnnAvailable && (
+        <p className="font-mono text-[11px] text-amber-500/90 border-l-2 border-amber-500/40 pl-3 py-1">
+          install cudnn 9.x to enable gpu acceleration
+        </p>
+      )}
+    </div>
+  );
+}
+
+function HotkeysPanel({
+  settings,
+  onUpdate,
+  onValidate,
+}: {
+  settings: Settings;
+  onUpdate: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  onValidate: (
+    hotkey: string,
+    exclude: "holdHotkey" | "toggleHotkey"
+  ) => Promise<{ valid: boolean; error: string | null }>;
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <HotkeyMode
+        icon={Hand}
+        title="Hold mode"
+        description="Hold to record, release to stop."
+        enabled={settings.holdHotkeyEnabled}
+        hotkey={settings.holdHotkey}
+        onToggle={(v) => onUpdate("holdHotkeyEnabled", v)}
+        onChange={(h) => onUpdate("holdHotkey", h)}
+        onValidate={(h) => onValidate(h, "holdHotkey")}
+      />
+      <HotkeyMode
+        icon={ToggleRight}
+        title="Toggle mode"
+        description="Press once to start, again to stop."
+        enabled={settings.toggleHotkeyEnabled}
+        hotkey={settings.toggleHotkey}
+        onToggle={(v) => onUpdate("toggleHotkeyEnabled", v)}
+        onChange={(h) => onUpdate("toggleHotkey", h)}
+        onValidate={(h) => onValidate(h, "toggleHotkey")}
+      />
+    </div>
+  );
+}
+
+function HotkeyMode({
+  icon: Icon,
+  title,
+  description,
+  enabled,
+  hotkey,
+  onToggle,
+  onChange,
+  onValidate,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  enabled: boolean;
+  hotkey: string;
+  onToggle: (v: boolean) => void;
+  onChange: (h: string) => void;
+  onValidate: (h: string) => Promise<{ valid: boolean; error: string | null }>;
+}) {
+  return (
+    <div
+      className={cn(
+        "panel p-5 space-y-4 transition-opacity",
+        !enabled && "opacity-60"
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <Icon
+            className={cn(
+              "w-4 h-4 mt-0.5 flex-shrink-0",
+              enabled ? "text-accent-500" : "text-cream-muted/50"
+            )}
+            strokeWidth={2}
+          />
+          <div>
+            <h4 className="text-sm font-medium text-cream">{title}</h4>
+            <p className="text-xs text-cream-muted mt-0.5 leading-relaxed">
+              {description}
+            </p>
+          </div>
+        </div>
+        <Switch checked={enabled} onCheckedChange={onToggle} />
+      </div>
+      <HotkeyCapture
+        value={hotkey}
+        onChange={onChange}
+        onValidate={onValidate}
+        disabled={!enabled}
+      />
+    </div>
+  );
+}
+
+function ThemePicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3 max-w-md">
+      {options.map((theme) => {
+        const Icon = THEME_ICONS[theme] ?? Sun;
+        const isActive = value === theme;
+        return (
+          <button
+            key={theme}
+            type="button"
+            onClick={() => onChange(theme)}
+            aria-pressed={isActive}
+            className={cn(
+              "relative flex flex-col items-center gap-2 rounded-md border p-4 transition-colors",
+              isActive
+                ? "border-accent-500/40 bg-accent-500/5 text-cream"
+                : "border-border bg-secondary/30 text-cream-muted hover:bg-secondary/60 hover:text-cream"
+            )}
+          >
+            <Icon
+              className={cn(
+                "w-5 h-5",
+                isActive ? "text-accent-500" : "text-cream-muted/70"
+              )}
+              strokeWidth={2}
+            />
+            <span className="font-mono text-[11px] uppercase tracking-widest">
+              {theme}
+            </span>
+            {isActive && (
+              <span
+                className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-accent-500"
+                aria-hidden
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Segmented({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="inline-flex flex-wrap gap-1 p-1 rounded-md border border-border bg-secondary/30">
+      {options.map((o) => {
+        const isActive = value === o.value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={isActive}
+            className={cn(
+              "h-8 px-3 rounded text-xs font-mono uppercase tracking-widest transition-colors",
+              isActive
+                ? "bg-background text-cream shadow-sm"
+                : "text-cream-muted hover:text-cream"
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StoragePaths({ modelCacheDir }: { modelCacheDir: string | null }) {
+  return (
+    <div className="border border-border rounded-md divide-y divide-border bg-surface">
+      <PathRow
+        label="App data"
+        description="History, settings, audio recordings"
+        path="~/.VoiceFlow/"
+        onOpen={() => api.openDataFolder()}
+      />
+      <PathRow
+        label="Model cache"
+        description="Downloaded Whisper models (Hugging Face)"
+        path={modelCacheDir ?? "Resolving…"}
+        onOpen={() => api.openModelCacheDir()}
+        disabled={!modelCacheDir}
+      />
+    </div>
+  );
+}
+
+function PathRow({
+  label,
+  description,
+  path,
+  onOpen,
+  disabled,
+}: {
+  label: string;
+  description: string;
+  path: string;
+  onOpen: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-4 px-5 py-4">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium text-cream">{label}</span>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-cream-muted/60">
+            {description}
+          </span>
+        </div>
+        <code
+          className="font-mono text-[11px] text-cream-muted mt-1.5 block break-all"
+          title={path}
+        >
+          {path}
+        </code>
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={disabled}
+        className="flex-shrink-0 h-9 px-3 rounded-md border border-border bg-secondary/40 hover:bg-secondary/60 hover:border-accent-500/30 hover:text-accent-500 transition-colors flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-cream-muted disabled:opacity-40 disabled:cursor-not-allowed"
+        aria-label={`Open ${label}`}
+      >
+        <ExternalLink className="w-3.5 h-3.5" />
+        open
+      </button>
+    </div>
+  );
+}
+
+function DangerZone() {
   const [deleteAppData, setDeleteAppData] = useState(true);
   const [deleteModels, setDeleteModels] = useState(false);
   const [deleteCudaLibs, setDeleteCudaLibs] = useState(false);
@@ -743,34 +1184,24 @@ function DangerZoneCard() {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      // Delete app data (history, settings, etc.)
-      if (deleteAppData) {
-        await api.resetAllData();
-      }
+      if (deleteAppData) await api.resetAllData();
+      if (deleteModels) await api.clearModelCache();
+      if (deleteCudaLibs) await api.clearCudaLibs();
 
-      // Delete models (clear HuggingFace cache)
-      if (deleteModels) {
-        await api.clearModelCache();
-      }
-
-      // Delete CUDA libraries (cuDNN + cuBLAS)
-      if (deleteCudaLibs) {
-        await api.clearCudaLibs();
-      }
-
-      const parts = [];
+      const parts: string[] = [];
       if (deleteAppData) parts.push("app data");
       if (deleteModels) parts.push("models");
       if (deleteCudaLibs) parts.push("CUDA libraries");
-      const message = parts.length > 0 ? `Deleted: ${parts.join(", ")}` : "Nothing deleted";
+      const message =
+        parts.length > 0 ? `Deleted: ${parts.join(", ")}` : "Nothing deleted";
 
-      toast.success(`${message} - returning to setup`);
+      toast.success(`${message} — returning to setup`);
       setTimeout(() => {
         window.location.hash = "/onboarding";
         window.location.reload();
       }, 500);
-    } catch (error) {
-      console.error("Failed to delete data:", error);
+    } catch (err) {
+      console.error("Failed to delete data:", err);
       toast.error("Failed to delete data");
     } finally {
       setIsDeleting(false);
@@ -780,109 +1211,111 @@ function DangerZoneCard() {
   const canDelete = deleteAppData || deleteModels || deleteCudaLibs;
 
   return (
-    <BentoSettingCard
-      title="Danger Zone"
-      description="Irreversible actions"
-      icon={Trash2}
-      className="md:col-span-6 lg:col-span-4 !border-destructive/20"
-      iconClass="text-destructive bg-destructive/10"
-    >
-      <div className="mt-auto">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button className="w-full flex items-center justify-center gap-2 h-12 rounded-xl border border-destructive/30 bg-destructive/5 hover:bg-destructive hover:text-white hover:border-destructive transition-all text-sm font-medium text-destructive">
-              <Trash2 className="w-4 h-4" />
-              Reset Data
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="glass-strong rounded-2xl">
-            <AlertDialogHeader>
-              <AlertDialogTitle>What would you like to delete?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select what data to remove. These actions cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            <div className="space-y-4 py-4">
-              {/* App Data Option */}
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer">
-                <Checkbox
-                  checked={deleteAppData}
-                  onCheckedChange={(checked) => setDeleteAppData(checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">App Data</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    History, settings, preferences, audio recordings
-                  </p>
-                  <code className="text-[10px] text-muted-foreground/70 mt-1 block">
-                    %USERPROFILE%\.VoiceFlow\
-                  </code>
-                </div>
-              </label>
-
-              {/* Models Option */}
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer">
-                <Checkbox
-                  checked={deleteModels}
-                  onCheckedChange={(checked) => setDeleteModels(checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">AI Models</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Downloaded Whisper models (requires re-download)
-                  </p>
-                  <code className="text-[10px] text-muted-foreground/70 mt-1 block">
-                    %USERPROFILE%\.cache\huggingface\hub\
-                  </code>
-                </div>
-              </label>
-
-              {/* CUDA Libraries Option */}
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer">
-                <Checkbox
-                  checked={deleteCudaLibs}
-                  onCheckedChange={(checked) => setDeleteCudaLibs(checked === true)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium text-sm">CUDA Libraries</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    cuDNN + cuBLAS for GPU acceleration (requires re-download)
-                  </p>
-                  <code className="text-[10px] text-muted-foreground/70 mt-1 block">
-                    %USERPROFILE%\.VoiceFlow\cuda\
-                  </code>
-                </div>
-              </label>
-            </div>
-
-            <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-xl">
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-white hover:bg-destructive/90 rounded-xl disabled:opacity-50"
-                onClick={handleDelete}
-                disabled={!canDelete || isDeleting}
-              >
-                {isDeleting ? "Deleting..." : "Delete Selected"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+    <div className="border border-destructive/20 rounded-md bg-destructive/[0.03] p-6 space-y-5">
+      <div className="flex items-start gap-3">
+        <Trash2
+          className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0"
+          strokeWidth={2}
+        />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-cream">Reset all data</p>
+          <p className="text-xs text-cream-muted mt-1 leading-relaxed max-w-xl">
+            Choose what to delete. After confirming, VoiceFlow returns to
+            onboarding so you can set things up fresh.
+          </p>
+        </div>
       </div>
-    </BentoSettingCard>
+
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            type="button"
+            className="h-10 px-5 rounded-md border border-destructive/40 bg-transparent text-destructive font-mono text-xs uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground transition-colors flex items-center gap-2"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Choose what to reset
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">
+              What would you like to delete?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Select what to remove. These actions cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2 py-2">
+            <DeleteOption
+              icon={FolderOpen}
+              checked={deleteAppData}
+              onCheckedChange={setDeleteAppData}
+              title="App data"
+              description="History, settings, audio recordings"
+            />
+            <DeleteOption
+              icon={HardDrive}
+              checked={deleteModels}
+              onCheckedChange={setDeleteModels}
+              title="AI models"
+              description="Whisper models — re-download required"
+            />
+            <DeleteOption
+              icon={Cpu}
+              checked={deleteCudaLibs}
+              onCheckedChange={setDeleteCudaLibs}
+              title="CUDA libraries"
+              description="cuDNN + cuBLAS — re-download required"
+            />
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={!canDelete || isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+            >
+              {isDeleting ? "Deleting…" : "Delete selected"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function DeleteOption({
+  icon: Icon,
+  checked,
+  onCheckedChange,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-secondary/30 transition-colors cursor-pointer">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(v) => onCheckedChange(v === true)}
+        className="mt-0.5"
+      />
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <Icon
+            className="w-3.5 h-3.5 text-cream-muted/60"
+            strokeWidth={2}
+          />
+          <span className="text-sm font-medium text-cream">{title}</span>
+        </div>
+        <p className="text-xs text-cream-muted mt-1">{description}</p>
+      </div>
+    </label>
   );
 }

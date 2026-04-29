@@ -44,7 +44,7 @@ class Settings:
     device: str = "auto"  # "auto", "cpu", or "cuda"
     auto_start: bool = True
     retention: int = -1  # days, -1 = forever
-    theme: str = "system"
+    theme: str = "dark"
     onboarding_complete: bool = False
     microphone: int = -1  # -1 = default device, otherwise device id
     save_audio_to_history: bool = False
@@ -74,7 +74,7 @@ class SettingsService:
             device=self.db.get_setting("device", "auto"),
             auto_start=self.db.get_setting("auto_start", "true") == "true",
             retention=int(self.db.get_setting("retention", "-1")),
-            theme=self.db.get_setting("theme", "system"),
+            theme=self.db.get_setting("theme", "dark"),
             onboarding_complete=self.db.get_setting("onboarding_complete", "false") == "true",
             microphone=int(self.db.get_setting("microphone", "-1")),
             save_audio_to_history=self.db.get_setting("save_audio_to_history", "false") == "true",

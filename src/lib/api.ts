@@ -43,6 +43,18 @@ export const api = {
     await rpc.call("stop_recording");
   },
 
+  async manualToggleRecording(): Promise<{ recording: boolean; changed: boolean; error?: string }> {
+    return rpc.call("manual_toggle_recording");
+  },
+
+  async getRecordingState(): Promise<{ recording: boolean; mode: string | null }> {
+    return rpc.call("get_recording_state");
+  },
+
+  async getHotkeyStatus(): Promise<{ available: boolean; code: string; message: string; device_count: number }> {
+    return rpc.call("get_hotkey_status");
+  },
+
   async startTestRecording(): Promise<void> {
     await rpc.call("start_test_recording");
   },
@@ -94,6 +106,14 @@ export const api = {
 
   async clearModelCache(): Promise<{ success: boolean; deleted_bytes: number; deleted_models: string[]; error: string | null }> {
     return rpc.call("clear_model_cache");
+  },
+
+  async getModelCacheDir(): Promise<{ path: string }> {
+    return rpc.call("get_model_cache_dir");
+  },
+
+  async openModelCacheDir(): Promise<{ success: boolean; error?: string; path: string }> {
+    return rpc.call("open_model_cache_dir");
   },
 
   // Hotkey validation

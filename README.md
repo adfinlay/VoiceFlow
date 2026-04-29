@@ -1,7 +1,11 @@
 # VoiceFlow
 
+> Open-source voice dictation for **Windows and Linux**. Hold a hotkey to record, release and the transcript is pasted at your cursor. Runs offline with Whisper. Free, no account needed. (macOS works but isn't officially supported yet.)
+
+**Website:** [get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · **Source:** [github.com/infiniV/VoiceFlow](https://github.com/infiniV/VoiceFlow)
+
 <p align="center">
-  <img src="media/hero.png" alt="VoiceFlow Hero" width="100%">
+  <img src="media/dashboard.png" alt="VoiceFlow Dashboard" width="100%">
 </p>
 
 # Own your Voice.
@@ -10,15 +14,18 @@
 
 VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak is processed entirely on your hardware—your voice data never leaves your device. Built for privacy-conscious professionals who demand speed and reliability.
 
-> **New: Linux Support (Experimental)**
-> VoiceFlow now runs on Linux with Wayland-native input, evdev hotkeys, and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/tag/v1.3.2)
+> **Linux Support**
+> VoiceFlow runs natively on Linux with Wayland & X11 support, evdev hotkeys, CUDA GPU acceleration (with CPU fallback), and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/latest)
 
 <p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe">
-    <img src="https://img.shields.io/badge/Download_for_Windows-000000?style=for-the-badge&logo=windows&logoColor=white" alt="Download">
+  <a href="https://get-voice-flow.vercel.app/">
+    <img src="https://img.shields.io/badge/Visit_Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website">
   </a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.3.2">
-    <img src="https://img.shields.io/badge/Download_for_Linux_(Experimental)-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux">
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
+    <img src="https://img.shields.io/badge/Download_for_Windows-000000?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows">
+  </a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
+    <img src="https://img.shields.io/badge/Download_for_Linux-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux">
   </a>
   <a href="https://github.com/infiniV/VoiceFlow">
     <img src="https://img.shields.io/badge/View_Source-000000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
@@ -30,10 +37,6 @@ VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak
 ### Why Pay for Noise?
 
 Cloud dictation services charge monthly fees while harvesting your voice data. VoiceFlow is free, fully local, and yours forever.
-
-<p align="center">
-  <img src="media/comparison.png" alt="Comparison" width="100%">
-</p>
 
 | Feature | VoiceFlow | Cloud Services |
 | :--- | :---: | :---: |
@@ -60,10 +63,6 @@ Everything runs on localhost. Your microphone data never leaves your RAM. We can
 
 No hidden processes, no cloud uploads. Just transparent, local AI at every step.
 
-<p align="center">
-  <img src="media/how-it-works.png" alt="How It Works" width="100%">
-</p>
-
 #### 1. Ready
 VoiceFlow waits silently in your system tray. A minimal popup indicates recording status.
 
@@ -73,8 +72,16 @@ Activate with your hotkey and speak naturally. Audio stays in RAM only—the int
 #### 3. Transcribe & Paste
 Release the hotkey. Local AI processes your audio instantly, then auto-pastes text at your cursor.
 
+The dashboard shown above is your live dictation log — today's words and entries appear inline next to lifetime totals, with your active model, language, microphone, and compute device on display.
+
+---
+
+### Guided Setup
+
+A seven-step setup picks the right microphone, compute device, and model for your hardware — no manual configuration. Dark mode by default; light and system themes are one click away.
+
 <p align="center">
-  <img src="media/app-dash.png" alt="VoiceFlow Dashboard" width="100%">
+  <img src="media/onboarding.png" alt="VoiceFlow Onboarding" width="100%">
 </p>
 
 ---
@@ -83,10 +90,6 @@ Release the hotkey. Local AI processes your audio instantly, then auto-pastes te
 
 Configure your preferred keyboard shortcuts with two recording modes to match your workflow.
 
-<p align="center">
-  <img src="media/hotkeys.png" alt="Custom Hotkeys" width="100%">
-</p>
-
 *   **Hold Mode**: Hold to record, release to transcribe. Perfect for quick dictation bursts.
 *   **Toggle Mode**: Press once to start, press again to stop. Ideal for longer recordings.
 
@@ -94,7 +97,11 @@ Configure your preferred keyboard shortcuts with two recording modes to match yo
 
 ### Neural Engine
 
-Choose from 16+ Whisper models optimized for different use cases.
+Choose from 16+ Whisper models optimized for different use cases. Each option shows speed, accuracy, parameter count, and disk footprint so you can pick what your hardware can comfortably run.
+
+<p align="center">
+  <img src="media/model-picker.png" alt="Model Picker" width="100%">
+</p>
 
 #### Model Categories
 *   **Standard** (Tiny → Large-v3): From 75MB to 3GB. Balance speed and accuracy for your hardware.
@@ -114,15 +121,9 @@ Choose from 16+ Whisper models optimized for different use cases.
 
 Take back control of your voice data. Open source and forever free.
 
-<p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe">
-    <img src="media/footer.png" alt="Download Now" width="100%">
-  </a>
-</p>
+### [Visit get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · [Download latest release](https://github.com/infiniV/VoiceFlow/releases/latest)
 
-### [Download Installer v1.3.1 (Windows)](https://github.com/infiniV/VoiceFlow/releases/download/v1.3.1/VoiceFlowSetup-1.3.1.exe)
-
-*Windows 10/11 • 64-bit • ~150MB*
+*Windows 10/11 (.exe) • Linux (.AppImage / .tar.gz) • 64-bit*
 
 <br>
 <br>

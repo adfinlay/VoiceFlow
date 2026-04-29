@@ -192,6 +192,9 @@ class HotkeyService:
         self._toggle_hotkey: str = "ctrl+shift+win"
         self._toggle_hotkey_enabled: bool = False
 
+        # Status tracking - exposed to UI so users see why hotkeys are silent
+        self._status: dict = {"available": True, "code": "ok", "message": "", "device_count": 0}
+
         # Linux evdev state
         if IS_LINUX:
             self._evdev_thread: Optional[threading.Thread] = None
@@ -422,10 +425,26 @@ class HotkeyService:
         keyboards = _find_keyboard_devices()
         if not keyboards:
             log.error("No keyboard devices found - hotkeys will not work. Ensure user is in 'input' group.")
+            self._status = {
+                "available": False,
+                "code": "no_input_access",
+                "message": (
+                    "VoiceFlow couldn't read any keyboard device, so global "
+                    "hotkeys are disabled. Add your user to the 'input' group "
+                    "and log out + back in: sudo usermod -aG input $USER"
+                ),
+                "device_count": 0,
+            }
             return
 
         log.info("Found keyboard devices", count=len(keyboards),
                  devices=[f"{d.name} ({d.path})" for d in keyboards])
+        self._status = {
+            "available": True,
+            "code": "ok",
+            "message": "",
+            "device_count": len(keyboards),
+        }
 
         self._evdev_thread = threading.Thread(
             target=self._evdev_listener_loop,
@@ -527,6 +546,36 @@ class HotkeyService:
         elif self._toggle_active:
             self._deactivate_toggle()
 
+    def manual_start(self) -> bool:
+        """Start a recording session triggered from the UI (not a hotkey).
+
+        Reuses toggle-mode bookkeeping so the rest of the controller flow
+        (popup state, transcription, paste, history) is identical to a
+        hotkey-driven session. Returns True if we started, False if a
+        recording was already active.
+        """
+        if self._hold_active or self._toggle_active:
+            log.debug("manual_start ignored - already recording")
+            return False
+        self._toggle_active = True
+        log.info("Manual recording started")
+        if self._on_activate:
+            self._on_activate()
+        return True
+
+    def manual_stop(self) -> bool:
+        """Stop a recording session that was started via manual_start.
+
+        Returns True if we stopped, False if nothing was recording.
+        """
+        if not (self._hold_active or self._toggle_active):
+            return False
+        if self._hold_active:
+            self._deactivate_hold()
+        else:
+            self._deactivate_toggle()
+        return True
+
     def is_running(self) -> bool:
         """Return True if the hotkey service is running."""
         return self._running
@@ -542,3 +591,7 @@ class HotkeyService:
         elif self._toggle_active:
             return "toggle"
         return None
+
+    def get_status(self) -> dict:
+        """Return the current hotkey availability status for the UI."""
+        return dict(self._status)
