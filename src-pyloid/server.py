@@ -321,27 +321,28 @@ async def open_data_folder():
 async def open_external_url(url: str):
     """Open a URL in the system's default browser.
 
-    Uses Qt's QDesktopServices first since it routes through the proper
-    desktop integration (xdg-open / kde-open / gio open / Cocoa /
-    ShellExecute) and is non-blocking. Falls back to platform-native
-    spawn-and-forget commands, then to the webbrowser module.
+    On Linux when frozen we go straight to xdg-open with a sanitized env so
+    the spawned browser doesn't inherit the bundle's LD_LIBRARY_PATH (which
+    causes chromium "undefined symbol: hb_calloc" from the bundled
+    libharfbuzz). QDesktopServices can't be told to use a custom env, so
+    we skip it in that case.
     """
     import sys
     import subprocess
     import webbrowser
+    from services.process_env import is_frozen, system_env
 
     log.info("Opening external URL", url=url)
 
-    # Preferred: Qt's QDesktopServices.openUrl - delegates to the right
-    # platform handler and returns immediately. Avoids the subprocess.run
-    # check=True trap on KDE where xdg-open forks to kde-open5 and exits 4.
-    try:
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices
-        if QDesktopServices.openUrl(QUrl(url)):
-            return {"success": True}
-    except Exception as e:
-        log.warning("QDesktopServices failed, falling back", error=str(e))
+    use_qt_first = not (is_frozen() and sys.platform.startswith("linux"))
+    if use_qt_first:
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            if QDesktopServices.openUrl(QUrl(url)):
+                return {"success": True}
+        except Exception as e:
+            log.warning("QDesktopServices failed, falling back", error=str(e))
 
     try:
         if sys.platform == 'win32':
@@ -350,10 +351,9 @@ async def open_external_url(url: str):
         elif sys.platform == 'darwin':
             subprocess.Popen(['open', url])
         else:
-            # Popen + no check=True: spawn xdg-open and don't block on exit
-            # status. xdg-open often forks helpers that return non-zero even
-            # on successful handoff (especially under KDE Plasma).
-            subprocess.Popen(['xdg-open', url])
+            subprocess.Popen(['xdg-open', url], env=system_env(),
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
         return {"success": True}
     except Exception as e:
         log.error("Failed to open external URL", url=url, error=str(e))
