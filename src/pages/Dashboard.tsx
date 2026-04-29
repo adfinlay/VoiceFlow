@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { Menu, Mic } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { HomePage } from "@/components/HomePage";
 import { HistoryPage } from "@/components/HistoryPage";
@@ -34,14 +34,16 @@ export function Dashboard() {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary rounded-md flex items-center justify-center">
-            <Mic className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
-          </div>
-          <span className="font-display font-semibold text-lg text-cream tracking-tight leading-none">
-            VoiceFlow
-          </span>
-        </div>
+        <img
+          src="/light-logo.png"
+          alt="VoiceFlow"
+          className="h-7 w-auto block dark:hidden"
+        />
+        <img
+          src="/dark-logo.png"
+          alt="VoiceFlow"
+          className="h-7 w-auto hidden dark:block"
+        />
       </header>
 
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

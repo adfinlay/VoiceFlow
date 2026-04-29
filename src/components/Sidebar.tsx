@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Mic, Home, History, Settings, Github, Heart, MessageSquare } from "lucide-react";
+import { Home, History, Settings, Github, Heart, MessageSquare } from "lucide-react";
 import { cn, formatHotkeyForDisplay } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -45,19 +45,19 @@ export function Sidebar({ onNavigate }: SidebarProps) {
     <aside className="w-64 h-screen bg-sidebar flex flex-col border-r border-sidebar-border relative">
       {/* Logo Area */}
       <div className="p-6 pb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-primary rounded-md flex items-center justify-center">
-            <Mic className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="font-display font-semibold text-lg text-cream tracking-tight leading-none">
-              VoiceFlow
-            </h1>
-            <p className="text-xs text-cream-muted mt-1 font-mono">
-              Local AI dictation
-            </p>
-          </div>
-        </div>
+        <img
+          src="/light-logo.png"
+          alt="VoiceFlow"
+          className="h-7 w-auto block dark:hidden"
+        />
+        <img
+          src="/dark-logo.png"
+          alt="VoiceFlow"
+          className="h-7 w-auto hidden dark:block"
+        />
+        <p className="text-xs text-cream-muted mt-2 font-mono">
+          Local AI dictation
+        </p>
       </div>
 
       {/* Navigation */}
