@@ -1,203 +1,108 @@
-# VoiceFlow
-
-> Open-source voice dictation for **Windows and Linux**. Hold a hotkey to record, release and the transcript is pasted at your cursor. Runs offline with Whisper. Free, no account needed. (macOS works but isn't officially supported yet.)
-
-**Website:** [get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · **Source:** [github.com/infiniV/VoiceFlow](https://github.com/infiniV/VoiceFlow)
-
 <p align="center">
-  <img src="media/dashboard.png" alt="VoiceFlow Dashboard" width="100%">
+  <img src="media/dashboard.png" alt="VoiceFlow dashboard" width="100%">
 </p>
 
-# Own your Voice.
-
-**Dictate freely with local AI. Zero latency. Zero data leaks. Zero cost.**
-
-VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak is processed entirely on your hardware—your voice data never leaves your device. Built for privacy-conscious professionals who demand speed and reliability.
-
-> **Linux Support**
-> VoiceFlow runs natively on Linux with Wayland & X11 support, evdev hotkeys, CUDA GPU acceleration (with CPU fallback), and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/latest)
-
-> **New · Experimental: Meetings**
-> Long-form recording with mic + system audio capture, on-device transcription, and AI-powered summaries — all local except the optional LLM call for the summary. Available in `v1.6.0-rc1`. [Jump to Meetings ↓](#meetings--experimental)
+<h1 align="center">VoiceFlow</h1>
 
 <p align="center">
-  <a href="https://get-voice-flow.vercel.app/">
-    <img src="https://img.shields.io/badge/Visit_Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website">
-  </a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
-    <img src="https://img.shields.io/badge/Download_for_Windows-000000?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows">
-  </a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/latest">
-    <img src="https://img.shields.io/badge/Download_for_Linux-000000?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux">
-  </a>
-  <a href="https://github.com/infiniV/VoiceFlow">
-    <img src="https://img.shields.io/badge/View_Source-000000?style=for-the-badge&logo=github&logoColor=white" alt="GitHub">
-  </a>
+  Hold a hotkey. Speak. Release. The transcript pastes itself at your cursor.
+</p>
+
+<p align="center">
+  Local Whisper dictation for Windows and Linux. No account, no cloud, no monthly bill.
+  <br/>
+  <sub>macOS builds and runs but isn't officially supported yet.</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/latest"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
+  <a href="https://get-voice-flow.vercel.app/"><img src="https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"></a>
 </p>
 
 ---
 
-### Why Pay for Noise?
+## What it does
 
-Cloud dictation services charge monthly fees while harvesting your voice data. VoiceFlow is free, fully local, and yours forever.
+VoiceFlow lives in your system tray. Hold a global hotkey, a small popup pops up with a live amplitude meter, you talk, you release, and the transcript is typed at the cursor. That's it.
 
-| Feature | VoiceFlow | Cloud Services |
-| :--- | :---: | :---: |
-| **Cost** | **$0.00** | $10-15/mo |
-| **Data Privacy** | **100% Local** | Cloud Processed |
-| **Offline Support** | **Full Capability** | None |
-| **Latency** | **Real-time** | Network Dependent |
-| **Account Required** | **No** | Yes |
-| **Open Source** | **MIT License** | Proprietary |
+The inference runs on your machine through [faster-whisper](https://github.com/SYSTRAN/faster-whisper). CUDA when you have it, CPU when you don't. The audio never touches a network socket.
 
----
+## Features
 
-### Unbreakable Privacy
+- **Fully local.** Audio stays in RAM. No telemetry, no analytics, no phone-home.
+- **16+ Whisper models.** Tiny (75 MB) through Large-v3 (3 GB), plus Turbo, distilled, and `.en` variants. The picker shows speed, accuracy, parameter count, and disk size for each.
+- **CUDA when available.** Auto-detects your GPU, falls back to CPU.
+- **Hold or Toggle modes.** Configurable hotkeys including modifier-only combos like `Ctrl+Win`.
+- **Wayland and X11.** Native `evdev` input on Linux, Hyprland window rules, `wl-copy` and `wtype`/`ydotool` for paste.
+- **99+ languages.** Whisper handles language detection automatically.
+- **Searchable history.** SQLite log of every transcript, stored at `~/.VoiceFlow/`.
+- **Dark mode by default.** Light and system themes if you want them.
 
-Everything runs on localhost. Your microphone data never leaves your RAM. We can't sell your data because we never see it.
+## Meetings (experimental)
 
-*   **Air-Gapped Safe**: Works completely offline after initial model download.
-*   **Open Source**: Audit every line of code yourself.
-*   **No Telemetry**: Zero tracking, zero analytics, zero cloud calls.
-
----
-
-### How It Works
-
-No hidden processes, no cloud uploads. Just transparent, local AI at every step.
-
-#### 1. Ready
-VoiceFlow waits silently in your system tray. A minimal popup indicates recording status.
-
-#### 2. Listening
-Activate with your hotkey and speak naturally. Audio stays in RAM only—the interface visualizes your voice amplitude in real-time.
-
-#### 3. Transcribe & Paste
-Release the hotkey. Local AI processes your audio instantly, then auto-pastes text at your cursor.
-
-The dashboard shown above is your live dictation log — today's words and entries appear inline next to lifetime totals, with your active model, language, microphone, and compute device on display.
-
----
-
-### Meetings — Experimental
-
-> **Heads up** — Meetings is brand new in `v1.6.0-rc1` and still experimental. Expect rough edges; please report what breaks.
-
-Long-form recordings with mic + system audio captured together, transcribed locally, then summarized by an LLM you bring. Everything except the optional summary call stays on your machine.
+New in `v1.6.0-rc1`. Long-form recording that captures mic input plus system audio (Zoom, Meet, anything that plays through your speakers) into one stereo file, transcribes it locally, and lets you bring your own LLM for the summary.
 
 <p align="center">
-  <img src="media/meetings-library.png" alt="Meetings library" width="100%">
+  <img src="media/meetings-detail.png" alt="Meeting detail with transcript, summary, and audio player" width="100%">
 </p>
 
-#### What it does
+- Pause, resume, and stop from the dashboard or the tray menu.
+- Re-transcribe any saved recording with a different model, device, or language without re-recording.
+- Bring your own LLM provider: OpenAI, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. API keys are stored in your OS keychain.
+- Export to Markdown, plain text, SRT, or structured JSON.
+- Auto-rename from a default timestamp to a real topic once the transcript is in.
 
-*   **Capture both sides** — mic input plus system audio (Zoom, Meet, browsers, anything that plays through your speakers) into a single stereo recording.
-*   **Long-form recording** — pause/resume, tray-menu stop, and a wall-clock timer that keeps ticking even if Chromium throttles the dashboard.
-*   **Local transcription** — same Whisper pipeline as dictation; works offline once your model is cached.
-*   **AI summary** — bring your own LLM (OpenAI, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint). Custom prompt template, streaming output, fully optional.
-*   **Auto-rename** — titles default to a timestamp; the LLM rewrites them to the actual topic after transcription.
-*   **Re-transcribe with a different model** — recorded on `tiny` but want `large-v3`? Switch model, device, and language on any saved recording without re-recording.
-*   **Audio playback with seek** — built-in player streams the original WAV with byte-range seeking.
-*   **Exports** — Markdown, plain text, SRT subtitles, structured JSON.
+Recording, transcription, search, and storage stay local. The only network call is the optional summary request, and you can skip it, point it at a local Ollama, or send it to a provider you already pay for.
 
-<p align="center">
-  <img src="media/meetings-detail.png" alt="Meeting detail with summary, transcript, and audio player" width="100%">
-</p>
+## VoiceFlow vs cloud dictation
 
-#### Bring your own LLM
+|  | VoiceFlow | Cloud services |
+| :--- | :--- | :--- |
+| Cost | $0 | ~$10–15/month |
+| Where audio goes | Your RAM | Their servers |
+| Works offline | Yes | No |
+| Account required | No | Yes |
+| License | MIT | Closed |
 
-The summary step is provider-agnostic. Pick a preset for the common cases (OpenAI, Groq, OpenRouter, Local Ollama) or wire up any OpenAI-compatible endpoint. API keys live in your OS keychain, never the database or logs.
+## Install
 
-<p align="center">
-  <img src="media/meetings-ai-summary.png" alt="AI Summary settings — provider picker, endpoint, model, API key, connection test" width="100%">
-</p>
+Grab the latest binary from [Releases](https://github.com/infiniV/VoiceFlow/releases/latest):
 
-#### Privacy posture
+- **Windows 10/11**: `.exe` installer (Inno Setup)
+- **Linux**: `.AppImage` or `.tar.gz`
 
-Recording, transcription, segmentation, search, and storage are all 100% local — same as dictation. The only network call is the summary request to whichever LLM endpoint you configure (which you can leave off entirely, or point at a local Ollama). The transcript is sent in that single call; nothing else.
+64-bit only. First launch walks you through a seven-step setup: microphone, compute device, Whisper model download, hotkey. If you delete the model later, a recovery dialog lets you re-download or pick a different one.
 
----
+## Build from source
 
-### Guided Setup
-
-A seven-step setup picks the right microphone, compute device, and model for your hardware — no manual configuration. Dark mode by default; light and system themes are one click away.
-
-<p align="center">
-  <img src="media/onboarding.png" alt="VoiceFlow Onboarding" width="100%">
-</p>
-
----
-
-### Custom Hotkeys
-
-Configure your preferred keyboard shortcuts with two recording modes to match your workflow.
-
-*   **Hold Mode**: Hold to record, release to transcribe. Perfect for quick dictation bursts.
-*   **Toggle Mode**: Press once to start, press again to stop. Ideal for longer recordings.
-
----
-
-### Neural Engine
-
-Choose from 16+ Whisper models optimized for different use cases. Each option shows speed, accuracy, parameter count, and disk footprint so you can pick what your hardware can comfortably run.
-
-<p align="center">
-  <img src="media/model-picker.png" alt="Model Picker" width="100%">
-</p>
-
-#### Model Categories
-*   **Standard** (Tiny → Large-v3): From 75MB to 3GB. Balance speed and accuracy for your hardware.
-*   **Turbo** (~1.6GB): Best speed-to-quality ratio. Recommended for daily use.
-*   **English-only** (.en variants): Optimized specifically for English with improved accuracy.
-*   **Distilled**: Faster inference with minimal quality loss.
-
-#### Core Features
-*   **99+ Languages**: Automatic language detection built-in.
-*   **Custom Hotkeys**: Configure your own shortcuts with Hold or Toggle modes.
-*   **Local History**: Searchable SQLite database of all your transcriptions.
-*   **Auto-Paste**: Text appears directly at your cursor—no copy-paste needed.
-
----
-
-### Ready to go local?
-
-Take back control of your voice data. Open source and forever free.
-
-### [Visit get-voice-flow.vercel.app](https://get-voice-flow.vercel.app/) · [Download latest release](https://github.com/infiniV/VoiceFlow/releases/latest)
-
-*Windows 10/11 (.exe) • Linux (.AppImage / .tar.gz) • 64-bit*
-
-<br>
-<br>
-
----
-
-# For Developers
-
-Build and contribute to VoiceFlow.
-
-### Quick Start
-
-```powershell
-# Clone and setup
+```bash
 git clone https://github.com/infiniV/VoiceFlow.git
 cd VoiceFlow
-pnpm run setup
-
-# Development with hot-reload
-pnpm run dev
-
-# Build installer
-pnpm run build:installer
+pnpm run setup        # installs Node and Python deps
+pnpm run dev          # Vite frontend + Pyloid backend
 ```
 
-### Architecture
+Platform installers (run on the matching OS):
 
-| Layer | Technology |
+```bash
+pnpm run build:installer          # Windows (.exe via Inno Setup)
+pnpm run build:installer:linux    # Linux (.AppImage and .tar.gz)
+pnpm run build:installer:macos    # macOS (.dmg, unsupported)
+```
+
+## Stack
+
+| Layer | Tech |
 | :--- | :--- |
-| **Core** | Pyloid (PySide6 + QtWebEngine) |
-| **Inference** | faster-whisper (CTranslate2) |
-| **Frontend** | React 18, Vite, Tailwind CSS v4 |
-| **UI** | shadcn/ui, Lucide React |
+| Shell | [Pyloid](https://github.com/pyloid/pyloid) (PySide6 + Qt WebEngine) |
+| Inference | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) |
+| Frontend | React 18, Vite, Tailwind v4, shadcn/ui |
+| Storage | SQLite at `~/.VoiceFlow/VoiceFlow.db` |
 
-[Releases](https://github.com/infiniV/VoiceFlow/releases) • [Issues](https://github.com/infiniV/VoiceFlow/issues) • [License](LICENSE)
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+[Releases](https://github.com/infiniV/VoiceFlow/releases) · [Issues](https://github.com/infiniV/VoiceFlow/issues) · [Website](https://get-voice-flow.vercel.app/)
