@@ -21,10 +21,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/latest"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/latest"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
   <a href="https://get-voice-flow.vercel.app/"><img src="https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"></a>
+</p>
+
+<p align="center">
+  <sub>Latest: <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><code>v1.6.0-rc1</code></a> (pre-release) · <a href="https://github.com/infiniV/VoiceFlow/releases">all releases</a></sub>
 </p>
 
 ---
@@ -48,7 +52,7 @@ The inference runs on your machine through [faster-whisper](https://github.com/S
 
 ## Meetings (experimental)
 
-New in `v1.6.0-rc1`. Long-form recording that captures mic input plus system audio (Zoom, Meet, anything that plays through your speakers) into one stereo file, transcribes it locally, and lets you bring your own LLM for the summary.
+New in [`v1.6.0-rc1`](https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1). Long-form recording that captures mic input plus system audio (Zoom, Meet, anything that plays through your speakers) into one stereo file, transcribes it locally, and lets you bring your own LLM for the summary.
 
 <p align="center">
   <img src="media/meetings-detail.png" alt="Meeting detail with transcript, summary, and audio player" width="100%">
@@ -74,7 +78,7 @@ Recording, transcription, search, and storage stay local. The only network call 
 
 ## Install
 
-Grab the latest binary from [Releases](https://github.com/infiniV/VoiceFlow/releases/latest):
+Grab the latest binary from [Releases](https://github.com/infiniV/VoiceFlow/releases) — currently [`v1.6.0-rc1`](https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1) (pre-release):
 
 - **Windows 10/11**: `.exe` installer (Inno Setup)
 - **Linux**: `.AppImage` or `.tar.gz`
