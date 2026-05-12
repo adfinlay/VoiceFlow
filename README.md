@@ -17,6 +17,9 @@ VoiceFlow brings OpenAI's Whisper directly to your machine. Every word you speak
 > **Linux Support**
 > VoiceFlow runs natively on Linux with Wayland & X11 support, evdev hotkeys, CUDA GPU acceleration (with CPU fallback), and AppImage packaging. [Download the Linux release](https://github.com/infiniV/VoiceFlow/releases/latest)
 
+> **New · Experimental: Meetings**
+> Long-form recording with mic + system audio capture, on-device transcription, and AI-powered summaries — all local except the optional LLM call for the summary. Available in `v1.6.0-rc1`. [Jump to Meetings ↓](#meetings--experimental)
+
 <p align="center">
   <a href="https://get-voice-flow.vercel.app/">
     <img src="https://img.shields.io/badge/Visit_Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website">
@@ -73,6 +76,37 @@ Activate with your hotkey and speak naturally. Audio stays in RAM only—the int
 Release the hotkey. Local AI processes your audio instantly, then auto-pastes text at your cursor.
 
 The dashboard shown above is your live dictation log — today's words and entries appear inline next to lifetime totals, with your active model, language, microphone, and compute device on display.
+
+---
+
+### Meetings — Experimental
+
+> **Heads up** — Meetings is brand new in `v1.6.0-rc1` and still experimental. Expect rough edges; please report what breaks.
+
+Long-form recordings with mic + system audio captured together, transcribed locally, then summarized by an LLM you bring. Everything except the optional summary call stays on your machine.
+
+<p align="center">
+  <img src="media/meetings-library.png" alt="Meetings library" width="100%">
+</p>
+
+#### What it does
+
+*   **Capture both sides** — mic input plus system audio (Zoom, Meet, browsers, anything that plays through your speakers) into a single stereo recording.
+*   **Long-form recording** — pause/resume, tray-menu stop, and a wall-clock timer that keeps ticking even if Chromium throttles the dashboard.
+*   **Local transcription** — same Whisper pipeline as dictation; works offline once your model is cached.
+*   **AI summary** — bring your own LLM (OpenAI, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint). Custom prompt template, streaming output, fully optional.
+*   **Auto-rename** — titles default to a timestamp; the LLM rewrites them to the actual topic after transcription.
+*   **Re-transcribe with a different model** — recorded on `tiny` but want `large-v3`? Switch model, device, and language on any saved recording without re-recording.
+*   **Audio playback with seek** — built-in player streams the original WAV with byte-range seeking.
+*   **Exports** — Markdown, plain text, SRT subtitles, structured JSON.
+
+<p align="center">
+  <img src="media/meetings-detail.png" alt="Meeting detail with summary, transcript, and audio player" width="100%">
+</p>
+
+#### Privacy posture
+
+Recording, transcription, segmentation, search, and storage are all 100% local — same as dictation. The only network call is the summary request to whichever LLM endpoint you configure (which you can leave off entirely, or point at a local Ollama). The transcript is sent in that single call; nothing else.
 
 ---
 
