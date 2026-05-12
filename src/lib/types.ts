@@ -17,6 +17,8 @@ export interface Settings {
   toggleHotkeyEnabled: boolean;
   // Transcription settings
   prependSpace: boolean;
+  // Recordings (Meetings) — backend-persisted toggles for the long-form flow.
+  recordingsAutoRenameTitle?: boolean;
 }
 
 export interface HistoryEntry {
@@ -122,4 +124,121 @@ export interface CudnnDownloadProgress {
   complete: boolean;
   success: boolean;
   status: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recordings (Meetings feature)
+// Backed by services/recording/* — see the approved plan and ADR-0001 for
+// channel layout and the Q5/Q7/Q8 decisions.
+
+export type RecordingSource = "mic" | "loopback";
+
+export type RecorderStateName = "idle" | "recording" | "paused" | "stopping";
+
+export type TranscriptStatus =
+  | "pending"
+  | "transcribing"
+  | "done"
+  | "error"
+  | "cancelled";
+
+export type SummaryStatus = "idle" | "summarizing" | "done" | "error";
+
+export interface AudioSource {
+  id: number;
+  name: string;
+  kind: RecordingSource;
+  hostApi: string;
+  isDefault: boolean;
+}
+
+export interface AudioSourceList {
+  mic: AudioSource[];
+  loopback: AudioSource[];
+}
+
+export interface RecorderState {
+  state: RecorderStateName;
+  recordingId: number | null;
+  durationMs: number;
+  micPeakDb: number | null;
+  loopbackPeakDb: number | null;
+}
+
+export interface Recording {
+  id: number;
+  title: string;
+  audioRelpath: string | null;
+  audioDurationMs: number | null;
+  audioSizeBytes: number | null;
+  audioSampleRate: number | null;
+  audioChannels: number | null;
+  sources: RecordingSource[];
+  language: string | null;
+  transcript: string | null;
+  transcriptModel: string | null;
+  transcriptStatus: TranscriptStatus;
+  transcriptProgress: number;
+  transcriptError: string | null;
+  summary: string | null;
+  summaryProvider: string | null;
+  summaryStatus: SummaryStatus;
+  summaryProgress: number;
+  summaryError: string | null;
+  tags: string[];
+  notes: string | null;
+  recorderState: RecorderStateName | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecordingSegment {
+  id: number;
+  recordingId: number;
+  startMs: number;
+  endMs: number;
+  text: string;
+}
+
+export interface RecordingWithSegments extends Recording {
+  segments: RecordingSegment[];
+}
+
+export type LLMPreset = "openai" | "groq" | "openrouter" | "ollama" | "custom";
+
+export interface LLMConfig {
+  preset: LLMPreset;
+  endpoint: string;
+  model: string;
+  hasApiKey: boolean;
+  promptTemplate: string;
+}
+
+export interface LLMTestResult {
+  ok: boolean;
+  error: string | null;
+  models?: string[];
+}
+
+export interface RecordingTranscribeProgress {
+  recordingId: number;
+  progress: number;
+  currentText?: string;
+}
+
+export interface RecordingSummarizeProgress {
+  recordingId: number;
+  progress: number;
+  partialText?: string;
+}
+
+export interface RecordingJobComplete {
+  recordingId: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface CachedModel {
+  name: string;
+  cached: boolean;
 }

@@ -2,16 +2,36 @@ import { useEffect, useState, useLayoutEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 
-type PopupState = "idle" | "recording" | "processing";
+type PopupState =
+  | "idle"
+  | "recording"
+  | "processing"
+  | "meeting-recording"
+  | "meeting-paused";
 
-// Brand accent (matches index.css --accent-500). Inline because the popup
-// window loads with `transparent` overrides so utility classes can't reliably
-// reach the surface.
-const ACCENT = "#22c55e";
+// Inline tokens. The popup loads with `transparent` overrides so utility
+// classes can't reliably reach the surface, and the surface is always dark
+// regardless of theme — so colors are pinned to fixed hexes that match the
+// design tokens' visual character on a dark surface.
+const ACCENT = "#22c55e"; // --accent-500
 const ACCENT_DIM = "rgba(34, 197, 94, 0.7)";
 const ACCENT_FAINT = "rgba(34, 197, 94, 0.18)";
+// Destructive on dark surface. Same warm red the recorder page's REC dot
+// resolves to in light mode (`--destructive` = #ef4444); a hair richer than
+// the dark-mode variant so it pops against the popup's translucent black.
+const REC_RED = "#ef4444";
+const REC_RED_FAINT = "rgba(239, 68, 68, 0.18)";
 const SURFACE = "rgba(9, 9, 11, 0.78)";
 const BORDER = "rgba(255, 255, 255, 0.08)";
+
+function formatMeetingDuration(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
 
 // Compact display label per model. Keeps the pill narrow even for the
 // long distilled/large variants.
@@ -43,6 +63,12 @@ export function Popup() {
   const [state, setState] = useState<PopupState>("idle");
   const [amplitude, setAmplitude] = useState(0);
   const [model, setModel] = useState<string | null>(null);
+  const [meetingDurationMs, setMeetingDurationMs] = useState(0);
+  // Base for the client-side timer: the duration the backend last reported,
+  // and the wall-clock moment we received it. Local ticking interpolates
+  // between backend updates so the counter feels live even if events are
+  // sparse. Resets every backend `popup-state` event.
+  const meetingBaseRef = useRef<{ at: number; dur: number }>({ at: 0, dur: 0 });
   const prefersReducedMotion = useRef(
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
@@ -82,8 +108,13 @@ export function Popup() {
 
   useEffect(() => {
     const handleAmplitude = (e: CustomEvent<number>) => setAmplitude(e.detail);
-    const handleState = (e: CustomEvent<{ state: PopupState }>) => {
-      setState(e.detail.state);
+    const handleState = (e: CustomEvent<{ state: PopupState; durationMs?: number }>) => {
+      const next = e.detail.state;
+      setState(next);
+      if (typeof e.detail.durationMs === "number") {
+        meetingBaseRef.current = { at: Date.now(), dur: e.detail.durationMs };
+        setMeetingDurationMs(e.detail.durationMs);
+      }
     };
 
     document.addEventListener("amplitude", handleAmplitude as EventListener);
@@ -94,6 +125,18 @@ export function Popup() {
       document.removeEventListener("popup-state", handleState as EventListener);
     };
   }, []);
+
+  // Client-side meeting duration ticker. Runs only while actively recording
+  // (paused → frozen at whatever the backend last reported). Resyncs whenever
+  // a fresh `popup-state` event lands.
+  useEffect(() => {
+    if (state !== "meeting-recording") return;
+    const id = window.setInterval(() => {
+      const { at, dur } = meetingBaseRef.current;
+      setMeetingDurationMs(dur + (Date.now() - at));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [state]);
 
   const reduced = prefersReducedMotion.current;
   const label = modelLabel(model);
@@ -205,6 +248,96 @@ export function Popup() {
           </motion.div>
         )}
 
+        {(state === "meeting-recording" || state === "meeting-paused") && (
+          <motion.div
+            key="meeting"
+            initial={reduced ? false : { opacity: 0, y: 4, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduced ? { opacity: 0 } : { opacity: 0, y: -2, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "5px 12px 5px 8px",
+              borderRadius: "999px",
+              background: SURFACE,
+              border: `1px solid ${BORDER}`,
+              backdropFilter: "blur(14px) saturate(140%)",
+              WebkitBackdropFilter: "blur(14px) saturate(140%)",
+              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.25)",
+            }}
+          >
+            {/* Dot + state label as one semantic unit. Matches the recorder
+                page's header treatment so colour and word agree. */}
+            <span
+              style={{
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background:
+                  state === "meeting-paused"
+                    ? "rgba(250, 250, 250, 0.45)"
+                    : REC_RED,
+                boxShadow:
+                  state === "meeting-paused"
+                    ? "none"
+                    : `0 0 0 3px ${REC_RED_FAINT}`,
+                animation:
+                  state === "meeting-recording" && !reduced
+                    ? "popup-rec-pulse 1.6s cubic-bezier(0.215, 0.61, 0.355, 1) infinite"
+                    : "none",
+              }}
+            />
+            <span
+              style={{
+                fontFamily:
+                  "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+                fontSize: "10px",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.25em",
+                color:
+                  state === "meeting-paused"
+                    ? "rgba(250, 250, 250, 0.45)"
+                    : REC_RED,
+                lineHeight: 1,
+              }}
+            >
+              {state === "meeting-paused" ? "paused" : "meeting"}
+            </span>
+
+            {/* Hairline divider — matches the dashboard's `h-px bg-border` rhythm. */}
+            <span
+              style={{
+                width: "1px",
+                height: "10px",
+                background: "rgba(255, 255, 255, 0.12)",
+              }}
+            />
+
+            {/* Duration in Clash Display tabular figures — same family as the
+                recorder page timer, scaled down. */}
+            <span
+              style={{
+                fontFamily:
+                  "'Clash Display', system-ui, sans-serif",
+                fontSize: "12px",
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums",
+                letterSpacing: "-0.01em",
+                color:
+                  state === "meeting-paused"
+                    ? "rgba(250, 250, 250, 0.55)"
+                    : "#fafafa",
+                lineHeight: 1,
+              }}
+            >
+              {formatMeetingDuration(meetingDurationMs)}
+            </span>
+          </motion.div>
+        )}
+
         {state === "processing" && (
           <motion.div
             key="processing"
@@ -299,6 +432,11 @@ export function Popup() {
         }
         @keyframes popup-spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes popup-rec-pulse {
+          0%   { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0.45); }
+          70%  { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);   }
+          100% { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0);   }
         }
         @keyframes popup-wave {
           0%, 100% {

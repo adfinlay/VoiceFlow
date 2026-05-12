@@ -37,6 +37,21 @@ THEME_OPTIONS = ["system", "light", "dark"]
 DEVICE_OPTIONS = ["auto", "cpu", "cuda"]
 
 
+# LLM presets for meeting summarization. Order matches the UI radio group.
+LLM_PRESETS = ["openai", "groq", "openrouter", "ollama", "custom"]
+
+DEFAULT_LLM_PROMPT = (
+    "You are a meeting-notes assistant. Read the transcript and produce a "
+    "structured summary in Markdown with these sections, in this order:\n\n"
+    "## TL;DR\nOne or two sentences.\n\n"
+    "## Key topics\nBulleted list.\n\n"
+    "## Decisions\nBulleted list.\n\n"
+    "## Action items\nBulleted list. When an owner is mentioned, prefix with [Owner].\n\n"
+    "## Open questions\nBulleted list. Omit the section if none.\n\n"
+    "Transcript:\n{transcript}\n"
+)
+
+
 @dataclass
 class Settings:
     language: str = "auto"
@@ -57,6 +72,17 @@ class Settings:
     toggle_hotkey_enabled: bool = False
     # Transcription settings
     prepend_space: bool = False  # Add leading space before pasted text
+    # Recordings (Meetings feature)
+    recordings_mic_device: Optional[str] = None
+    recordings_loopback_device: Optional[str] = None
+    recordings_auto_transcribe: bool = True
+    recordings_auto_summarize: bool = False
+    recordings_auto_rename_title: bool = True
+    # LLM config for summarization (API key stored separately via services.recording.secrets)
+    llm_preset: str = "ollama"
+    llm_endpoint: str = "http://localhost:11434/v1"
+    llm_model: str = "llama3.2"
+    llm_prompt_template: str = DEFAULT_LLM_PROMPT
 
 
 class SettingsService:
@@ -87,6 +113,17 @@ class SettingsService:
             toggle_hotkey_enabled=self.db.get_setting("toggle_hotkey_enabled", "false") == "true",
             # Transcription settings
             prepend_space=self.db.get_setting("prepend_space", "false") == "true",
+            # Recordings (Meetings)
+            recordings_mic_device=self.db.get_setting("recordings_mic_device", None),
+            recordings_loopback_device=self.db.get_setting("recordings_loopback_device", None),
+            recordings_auto_transcribe=self.db.get_setting("recordings_auto_transcribe", "true") == "true",
+            recordings_auto_summarize=self.db.get_setting("recordings_auto_summarize", "false") == "true",
+            recordings_auto_rename_title=self.db.get_setting("recordings_auto_rename_title", "true") == "true",
+            # LLM config
+            llm_preset=self.db.get_setting("llm_preset", "ollama"),
+            llm_endpoint=self.db.get_setting("llm_endpoint", "http://localhost:11434/v1"),
+            llm_model=self.db.get_setting("llm_model", "llama3.2"),
+            llm_prompt_template=self.db.get_setting("llm_prompt_template", DEFAULT_LLM_PROMPT),
         )
         self._cache = settings
         return settings
@@ -109,6 +146,17 @@ class SettingsService:
         toggle_hotkey_enabled: Optional[bool] = None,
         show_popup: Optional[bool] = None,
         prepend_space: Optional[bool] = None,
+        # Recordings
+        recordings_mic_device: Optional[str] = None,
+        recordings_loopback_device: Optional[str] = None,
+        recordings_auto_transcribe: Optional[bool] = None,
+        recordings_auto_summarize: Optional[bool] = None,
+        recordings_auto_rename_title: Optional[bool] = None,
+        # LLM
+        llm_preset: Optional[str] = None,
+        llm_endpoint: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        llm_prompt_template: Optional[str] = None,
     ) -> Settings:
         if language is not None:
             self.db.set_setting("language", language)
@@ -141,6 +189,26 @@ class SettingsService:
             self.db.set_setting("toggle_hotkey", normalize_hotkey(toggle_hotkey))
         if toggle_hotkey_enabled is not None:
             self.db.set_setting("toggle_hotkey_enabled", "true" if toggle_hotkey_enabled else "false")
+        # Recordings (Meetings)
+        if recordings_mic_device is not None:
+            self.db.set_setting("recordings_mic_device", recordings_mic_device)
+        if recordings_loopback_device is not None:
+            self.db.set_setting("recordings_loopback_device", recordings_loopback_device)
+        if recordings_auto_transcribe is not None:
+            self.db.set_setting("recordings_auto_transcribe", "true" if recordings_auto_transcribe else "false")
+        if recordings_auto_summarize is not None:
+            self.db.set_setting("recordings_auto_summarize", "true" if recordings_auto_summarize else "false")
+        if recordings_auto_rename_title is not None:
+            self.db.set_setting("recordings_auto_rename_title", "true" if recordings_auto_rename_title else "false")
+        # LLM config
+        if llm_preset is not None:
+            self.db.set_setting("llm_preset", llm_preset)
+        if llm_endpoint is not None:
+            self.db.set_setting("llm_endpoint", llm_endpoint)
+        if llm_model is not None:
+            self.db.set_setting("llm_model", llm_model)
+        if llm_prompt_template is not None:
+            self.db.set_setting("llm_prompt_template", llm_prompt_template)
 
         self._cache = None  # Invalidate cache
         return self.get_settings()

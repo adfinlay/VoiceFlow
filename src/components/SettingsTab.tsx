@@ -39,6 +39,8 @@ import { api } from "@/lib/api";
 import type { Settings, Options, GpuInfo } from "@/lib/types";
 import { ModelDownloadModal } from "./ModelDownloadModal";
 import { HotkeyCapture } from "./HotkeyCapture";
+import { LLMSettingsSection } from "./meetings/LLMSettingsSection";
+import { MeetingsSettingsSection } from "./meetings/MeetingsSettingsSection";
 import { cn } from "@/lib/utils";
 
 // Hardcoded faster-whisper spec sheet. The backend exposes only model names,
@@ -77,9 +79,11 @@ const THEME_ICONS: Record<string, React.ElementType> = {
 const SECTIONS = [
   { id: "transcription", num: "01", label: "transcription" },
   { id: "behavior",      num: "02", label: "behavior" },
-  { id: "appearance",    num: "03", label: "appearance" },
-  { id: "data",          num: "04", label: "data" },
-  { id: "reset",         num: "05", label: "reset" },
+  { id: "meetings",      num: "03", label: "meetings" },
+  { id: "ai_summary",    num: "04", label: "ai summary" },
+  { id: "appearance",    num: "05", label: "appearance" },
+  { id: "data",          num: "06", label: "data" },
+  { id: "reset",         num: "07", label: "reset" },
 ] as const;
 
 function formatModelSize(mb: number): string {
@@ -398,8 +402,26 @@ export function SettingsTab() {
         </Section>
 
         <Section
-          id="appearance"
+          id="meetings"
           index="03"
+          title="Meetings"
+          description="Long-form recording, transcription, and review. Captures your microphone, the other side of a Teams/Meet/Zoom call, or both."
+        >
+          <MeetingsSettingsSection />
+        </Section>
+
+        <Section
+          id="ai_summary"
+          index="04"
+          title="AI summary"
+          description="The model that turns a transcript into a structured summary. Use a local Ollama instance for full privacy, or any OpenAI-compatible cloud provider."
+        >
+          <LLMSettingsSection />
+        </Section>
+
+        <Section
+          id="appearance"
+          index="05"
           title="Appearance"
           description="Light, dark, or follow your operating system."
         >
@@ -412,7 +434,7 @@ export function SettingsTab() {
 
         <Section
           id="data"
-          index="04"
+          index="06"
           title="Data"
           description="What gets kept, where it lives, and for how long."
         >
@@ -436,7 +458,7 @@ export function SettingsTab() {
 
         <Section
           id="reset"
-          index="05"
+          index="07"
           title="Reset"
           tone="danger"
           description="Wipe local state and start over. None of this can be undone."

@@ -2,7 +2,7 @@
 ; Creates a Windows installer from the PyInstaller --onedir output
 
 #define MyAppName "VoiceFlow"
-#define MyAppVersion "1.5.1"
+#define MyAppVersion "1.6.0-rc1"
 #define MyAppPublisher "infiniV"
 #define MyAppURL "https://get-voice-flow.vercel.app/"
 #define MyAppSupportURL "https://github.com/infiniV/VoiceFlow/issues"
@@ -53,6 +53,16 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startupicon"; Description: "Start {#MyAppName} when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
+
+[InstallDelete]
+; Wipe the bundled python tree from any prior install before laying down new
+; files. Required because some Python wheels change filenames across versions
+; (e.g. PyAV 15.x shipped av/codec/codec.cp312-win_amd64.pyd while 17.x ships
+; av/codec/codec.abi3.pyd). Without this, an upgrade leaves the older .pyd
+; sitting next to the newer one and Python imports the stale version-tagged
+; extension first, causing ImportError on missing symbols.
+; User data lives in %USERPROFILE%\.VoiceFlow and is NOT affected.
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
 ; Include entire VoiceFlow directory from PyInstaller output
