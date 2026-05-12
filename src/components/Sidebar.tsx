@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { Home, History, Radio, Settings, Github, Heart, MessageSquare } from "lucide-react";
 import { cn, formatHotkeyForDisplay } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { APP_VERSION } from "@/lib/constants";
 
 const GITHUB_REPO_URL = "https://github.com/infiniV/VoiceFlow";
 const FALLBACK_HOTKEY = "ctrl+win";
@@ -131,7 +132,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         <div className="pt-3 px-3 flex items-center justify-between text-[10px] text-cream-muted/50 font-mono">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-            v1.5.0
+            v{APP_VERSION}
           </span>
           <span className="flex items-center gap-1">
             <Heart className="w-2.5 h-2.5" strokeWidth={2} />
