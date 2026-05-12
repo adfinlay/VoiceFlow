@@ -101,11 +101,13 @@ class SoundDeviceAudioSource:
         # Open the stream at the target rate if possible; otherwise fall back
         # to the device's native rate and resample.
         candidate_rates = [self.sample_rate]
+        max_input_channels = 1
         try:
             info = sd.query_devices(self._device_id)
             native = int(info.get("default_samplerate") or 0)
             if native > 0 and native not in candidate_rates:
                 candidate_rates.append(native)
+            max_input_channels = max(1, int(info.get("max_input_channels") or 1))
         except Exception:
             pass
         # Common fallbacks if everything else fails.
@@ -113,25 +115,47 @@ class SoundDeviceAudioSource:
             if r not in candidate_rates:
                 candidate_rates.append(r)
 
+        # Channel-count fallback. WASAPI loopback / Stereo Mix devices on
+        # Windows are stereo-only — opening with channels=1 gets rejected by
+        # PortAudio with `Invalid number of channels [PaErrorCode -9998]`,
+        # which left the meeting recorder with header-only WAV files. The
+        # downmix in _make_pa_callback below already flattens N-channel input
+        # to mono, so we just need to open the stream at whatever channel
+        # count the device supports.
+        candidate_channels: list[int] = []
+        if self._loopback:
+            # Loopback first tries the device's native channel count, then
+            # falls back to 1 in the unlikely case max_input_channels was 1.
+            candidate_channels.append(max_input_channels)
+            if 1 not in candidate_channels:
+                candidate_channels.append(1)
+        else:
+            # Mic: keep prior behavior (mono first), but allow a stereo
+            # fallback in case the chosen device refuses mono open.
+            candidate_channels.append(1)
+            if max_input_channels > 1 and max_input_channels not in candidate_channels:
+                candidate_channels.append(max_input_channels)
+
         last_err: Optional[Exception] = None
-        for rate in candidate_rates:
-            try:
-                stream = sd.InputStream(
-                    device=self._device_id,
-                    samplerate=rate,
-                    channels=1,
-                    dtype="float32",
-                    blocksize=0,  # let PortAudio pick — JACK in particular dislikes fixed block sizes
-                    callback=self._make_pa_callback(rate),
-                    extra_settings=extra_settings,
-                )
-                stream.start()
-                self._stream = stream
-                self._device_rate = rate
-                return
-            except Exception as exc:
-                last_err = exc
-                continue
+        for ch in candidate_channels:
+            for rate in candidate_rates:
+                try:
+                    stream = sd.InputStream(
+                        device=self._device_id,
+                        samplerate=rate,
+                        channels=ch,
+                        dtype="float32",
+                        blocksize=0,  # let PortAudio pick — JACK in particular dislikes fixed block sizes
+                        callback=self._make_pa_callback(rate),
+                        extra_settings=extra_settings,
+                    )
+                    stream.start()
+                    self._stream = stream
+                    self._device_rate = rate
+                    return
+                except Exception as exc:
+                    last_err = exc
+                    continue
         # Nothing worked.
         self._callback = None
         raise RuntimeError(
