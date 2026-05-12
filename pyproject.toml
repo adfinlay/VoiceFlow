@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 dependencies = [
     "pyloid",

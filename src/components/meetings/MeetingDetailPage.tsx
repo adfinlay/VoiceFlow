@@ -4,7 +4,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Download, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +35,7 @@ import {
 import { api } from "@/lib/api";
 import type { LLMConfig, RecordingWithSegments } from "@/lib/types";
 import { AudioPlayer, type AudioPlayerHandle } from "./AudioPlayer";
+import { RetranscribeDialog } from "./RetranscribeDialog";
 import { StatusLine } from "./StatusLine";
 import { SummaryView } from "./SummaryView";
 import { TranscriptView } from "./TranscriptView";
@@ -44,6 +52,7 @@ export function MeetingDetailPage() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [currentMs, setCurrentMs] = useState(0);
+  const [retranscribeOpen, setRetranscribeOpen] = useState(false);
 
   const audioRef = useRef<AudioPlayerHandle>(null);
 
@@ -266,10 +275,17 @@ export function MeetingDetailPage() {
             />
 
             <section className="space-y-4">
-              <header className="flex items-baseline justify-between gap-4">
-                <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-cream leading-tight">
-                  Transcript
-                </h2>
+              <header className="flex items-baseline justify-between gap-4 flex-wrap">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <h2 className="font-display text-2xl md:text-3xl font-medium tracking-tight text-cream leading-tight">
+                    Transcript
+                  </h2>
+                  {recording.transcriptModel && (
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream-muted/60 px-2 py-0.5 border border-border rounded-sm">
+                      {recording.transcriptModel}
+                    </span>
+                  )}
+                </div>
                 {recording.transcriptStatus === "transcribing" && (
                   <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent-500 inline-flex items-center gap-1.5">
                     <span className="w-1 h-1 rounded-full bg-current animate-pulse" />
@@ -304,6 +320,20 @@ export function MeetingDetailPage() {
             <Metadata recording={recording} />
 
             <div className="space-y-2 pt-6 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                disabled={
+                  !recording.audioRelpath ||
+                  recording.transcriptStatus === "transcribing" ||
+                  recording.transcriptStatus === "pending"
+                }
+                onClick={() => setRetranscribeOpen(true)}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Re-transcribe
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -367,6 +397,13 @@ export function MeetingDetailPage() {
           </aside>
         </div>
       </div>
+
+      <RetranscribeDialog
+        open={retranscribeOpen}
+        onOpenChange={setRetranscribeOpen}
+        recording={recording}
+        onStarted={load}
+      />
     </div>
   );
 }

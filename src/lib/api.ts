@@ -15,6 +15,7 @@ import type {
   RecorderState,
   Recording,
   RecordingWithSegments,
+  CachedModel,
   LLMConfig,
   LLMPreset,
   LLMTestResult,
@@ -270,8 +271,24 @@ export const api = {
     return rpc.call("recordings_transcribe", { id });
   },
 
+  async recordingsRetranscribe(
+    id: number,
+    opts: { model?: string; device?: string; language?: string } = {},
+  ): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_retranscribe", {
+      id,
+      model: opts.model,
+      device: opts.device,
+      language: opts.language,
+    });
+  },
+
   async recordingsCancelTranscribe(id: number): Promise<{ ok: boolean }> {
     return rpc.call("recordings_cancel_transcribe", { id });
+  },
+
+  async recordingsListCachedModels(): Promise<CachedModel[]> {
+    return rpc.call("recordings_list_cached_models");
   },
 
   async recordingsSummarize(

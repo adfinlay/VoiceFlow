@@ -29,23 +29,47 @@ if sys.platform.startswith('linux'):
         pass  # Best-effort, don't crash on failure
 
     def _setup_hyprland_window_rules():
-        """Set Hyprland window rules for the popup overlay if running under Hyprland."""
+        """Set Hyprland window rules for the popup overlay if running under Hyprland.
+
+        On Wayland, Qt clients cannot position their own toplevels — `set_position()`
+        is a silent no-op. We therefore rely on the compositor to place and pin the
+        popup. These rules use `windowrulev2` with the correct matcher syntax
+        `title:^(Recording)$`. The previous `windowrule "...,match:title Recording"`
+        form was silently rejected by hyprctl (no `match:` keyword exists), which
+        is why the popup spawned in the middle of the screen on production builds
+        even though the Python coordinate math was correct.
+
+        TODO(wayland-other-compositors): KDE and GNOME need wlr-layer-shell or
+        equivalent to dock a window — there's no portable Wayland positioning API.
+        Only Hyprland is handled here for now (the rest of the userbase is X11/win/mac).
+        """
         if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
             return
         import subprocess
+        # `move 50%-w/2 100%-h-100` puts the popup horizontally centered and
+        # 100 px above the bottom of the active monitor (matches the original
+        # Python intent at main.py: popup_y = _screen_y + _screen_height - 100).
         rules = [
-            "float on, match:title Recording",
-            "pin on, match:title Recording",
-            "no_initial_focus on, match:title Recording",
-            "border_size 0, match:title Recording",
-            "tag -default-opacity, match:title Recording",
-            "opacity 1 1, match:title Recording",
-            "move (monitor_w-window_w)/2 (monitor_h-100), match:title Recording",
+            "float,title:^(Recording)$",
+            "pin,title:^(Recording)$",
+            "noinitialfocus,title:^(Recording)$",
+            "nofocus,title:^(Recording)$",
+            "noborder,title:^(Recording)$",
+            "noshadow,title:^(Recording)$",
+            "noblur,title:^(Recording)$",
+            "rounding 0,title:^(Recording)$",
+            "opacity 1.0 override 1.0 override,title:^(Recording)$",
+            "move onscreen 50%-w/2 100%-h-100,title:^(Recording)$",
         ]
         for rule in rules:
             try:
-                subprocess.run(['hyprctl', 'keyword', 'windowrule', rule],
-                               capture_output=True, timeout=2)
+                result = subprocess.run(
+                    ['hyprctl', 'keyword', 'windowrulev2', rule],
+                    capture_output=True, timeout=2, text=True,
+                )
+                if result.returncode != 0:
+                    print(f"[WARN] hyprctl rejected rule {rule!r}: {result.stderr.strip() or result.stdout.strip()}",
+                          flush=True)
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 break
 
@@ -56,6 +80,33 @@ if sys.platform.startswith('linux'):
 
     # Disable accessibility scanning — major perf bottleneck on Linux with large HTML pages
     os.environ.setdefault('QTWEBENGINE_ENABLE_LINUX_ACCESSIBILITY', '0')
+
+# ----------------------------------------------------------------------------
+# Register the voiceflow:// custom URL scheme BEFORE QApplication is created.
+# QWebEngineUrlScheme.registerScheme() is a no-op once QApplication exists.
+# Pyloid's __init__ instantiates QApplication, so this MUST run before the
+# `from pyloid import Pyloid` import below (its module init does NOT construct
+# QApplication; only Pyloid(...) does).
+#
+# The HTML5 <audio> element on MeetingDetailPage builds URLs of the form
+# `voiceflow://recording/<filename>.wav`. The matching handler subclass is
+# in services.recording.audio_scheme_handler and is installed on the default
+# QWebEngineProfile after Pyloid() returns.
+# ----------------------------------------------------------------------------
+from PySide6.QtWebEngineCore import QWebEngineUrlScheme
+
+_vf_scheme = QWebEngineUrlScheme(b"voiceflow")
+_vf_scheme.setSyntax(QWebEngineUrlScheme.Syntax.Host)
+# PortUnspecified is the default for newly-constructed schemes; PySide6's
+# setDefaultPort wants a raw int (-1) rather than the SpecialPort enum, so
+# we just leave it at the default to avoid the type-mismatch.
+_vf_scheme.setFlags(
+    QWebEngineUrlScheme.Flag.SecureScheme
+    | QWebEngineUrlScheme.Flag.LocalAccessAllowed
+    | QWebEngineUrlScheme.Flag.CorsEnabled
+    | QWebEngineUrlScheme.Flag.ViewSourceAllowed
+)
+QWebEngineUrlScheme.registerScheme(_vf_scheme)
 
 from pyloid.tray import TrayEvent
 from pyloid.utils import get_production_path, is_production
@@ -212,6 +263,16 @@ print("[DEBUG] Creating Pyloid app...", flush=True)
 app = Pyloid(app_name="VoiceFlow", single_instance=True, server=server)
 print("[DEBUG] Pyloid app created", flush=True)
 
+# Install the voiceflow:// handler on the default profile. The scheme itself
+# was registered above (before QApplication). The handler must outlive every
+# request, so we hold a module-level reference — Qt holds a non-owning ref.
+from PySide6.QtWebEngineCore import QWebEngineProfile
+from services.recording.audio_scheme_handler import VoiceFlowAudioSchemeHandler
+_vf_audio_handler = VoiceFlowAudioSchemeHandler(get_controller().meetings.data_root)
+QWebEngineProfile.defaultProfile().installUrlSchemeHandler(b"voiceflow", _vf_audio_handler)
+log.info("voiceflow:// scheme handler installed",
+         data_root=str(get_controller().meetings.data_root))
+
 print("[DEBUG] Setting icons...", flush=True)
 app.set_icon(get_production_path("src-pyloid/icons/icon.png"))
 app.set_tray_icon(get_production_path("src-pyloid/icons/icon.png"))
@@ -287,6 +348,33 @@ _screen_width = 1920
 _screen_height = 1080
 
 
+def _is_hyprland() -> bool:
+    return bool(os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'))
+
+
+def _hypr_dispatch(*args: str) -> None:
+    """Run `hyprctl dispatch ...`; no-op if not on Hyprland or hyprctl missing.
+
+    Used at runtime to move/resize the floating popup whenever it changes
+    state (idle ↔ active), since Qt's `set_position()` is silently dropped on
+    Wayland — the compositor is the only authority on window placement.
+    """
+    if not _is_hyprland():
+        return
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['hyprctl', 'dispatch', *args],
+            capture_output=True, timeout=2, text=True,
+        )
+        if result.returncode != 0:
+            log.warning("hyprctl dispatch failed",
+                        args=list(args),
+                        stderr=(result.stderr or '').strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        log.warning("hyprctl dispatch error", error=str(e))
+
+
 def get_active_monitor_info():
     """Get the monitor where the cursor is currently located (for multi-monitor support)."""
     global _screen_x, _screen_y, _screen_width, _screen_height
@@ -333,17 +421,17 @@ def resize_popup(width: int, height: int):
         return
 
     try:
-        # Resize the window
+        # Resize the window (works on X11 / Windows / macOS).
         popup_window.set_size(width, height)
 
-        # Recenter horizontally on active monitor, keep at bottom
-        # Use monitor offset (_screen_x, _screen_y) for multi-monitor support
+        # Recenter horizontally on active monitor, keep at bottom.
+        # Use monitor offset (_screen_x, _screen_y) for multi-monitor support.
         popup_x = _screen_x + (_screen_width - width) // 2
         popup_y = _screen_y + _screen_height - 100
         popup_window.set_position(popup_x, popup_y)
 
-        # Ensure stay-on-top is maintained after resize
-        # Also prevent resizing and make non-focusable to reduce blinking
+        # Ensure stay-on-top is maintained after resize.
+        # Also prevent resizing and make non-focusable to reduce blinking.
         qwindow = popup_window._window._window
         qwindow.setWindowFlags(
             Qt.FramelessWindowHint |
@@ -351,11 +439,18 @@ def resize_popup(width: int, height: int):
             Qt.Tool |
             Qt.WindowDoesNotAcceptFocus
         )
-        # Re-apply translucent background (required after setWindowFlags)
+        # Re-apply translucent background (required after setWindowFlags).
         qwindow.setAttribute(Qt.WA_TranslucentBackground, True)
-        # Prevent window resizing
+        # Prevent window resizing.
         qwindow.setFixedSize(width, height)
         qwindow.show()
+
+        # Wayland fallback: ask the compositor to re-dock the existing window.
+        # `set_position()` and `set_size()` above are no-ops on Wayland for
+        # toplevels — the windowrulev2 from _setup_hyprland_window_rules() only
+        # fires on initial map, so we have to dispatch the move/resize here too.
+        _hypr_dispatch('resizewindowpixel', f'exact {width} {height},title:^(Recording)$')
+        _hypr_dispatch('movewindowpixel', f'exact {popup_x} {popup_y},title:^(Recording)$')
     except Exception as e:
         log.error("Failed to resize popup", error=str(e))
 
@@ -422,6 +517,17 @@ def init_popup():
             log.info("Popup window created and shown",
                      x=popup_x, y=popup_y,
                      monitor_offset_x=_screen_x, monitor_offset_y=_screen_y)
+
+            # Wayland: enforce dock position once the window is mapped.
+            # The windowrulev2 move rule fires on map, but we re-issue here in
+            # case the rule registration race hasn't completed yet on first run.
+            def _enforce_dock_position():
+                _hypr_dispatch('resizewindowpixel',
+                               f'exact {POPUP_IDLE_WIDTH} {POPUP_IDLE_HEIGHT},title:^(Recording)$')
+                _hypr_dispatch('movewindowpixel',
+                               f'exact {popup_x} {popup_y},title:^(Recording)$')
+
+            QTimer.singleShot(100, _enforce_dock_position)
 
             # Send initial idle state after a brief delay to ensure page is loaded
             def send_initial_state():

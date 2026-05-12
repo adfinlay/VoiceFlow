@@ -71,6 +71,7 @@ class DatabaseService:
                 sources TEXT NOT NULL DEFAULT '[]',
                 language TEXT,
                 transcript TEXT,
+                transcript_model TEXT,
                 transcript_status TEXT NOT NULL DEFAULT 'pending',
                 transcript_progress REAL NOT NULL DEFAULT 0,
                 transcript_error TEXT,
@@ -90,6 +91,16 @@ class DatabaseService:
             "CREATE INDEX IF NOT EXISTS idx_recordings_created_at "
             "ON recordings(created_at DESC)"
         )
+
+        # Migration for existing DBs: add transcript_model column if missing.
+        cursor.execute("PRAGMA table_info(recordings)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if "transcript_model" not in existing_cols:
+            try:
+                cursor.execute("ALTER TABLE recordings ADD COLUMN transcript_model TEXT")
+                debug("Added transcript_model column to recordings table")
+            except sqlite3.OperationalError as exc:
+                debug(f"Failed to add transcript_model column: {exc}")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS recording_segments (
@@ -586,15 +597,24 @@ class DatabaseService:
         recording_id: int,
         transcript: str,
         language: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> None:
-        """Persist the final transcript text. Segments go via replace_recording_segments."""
+        """Persist the final transcript text. Segments go via replace_recording_segments.
+
+        `model` is the whisper model name that produced the transcript (e.g.
+        'tiny', 'large-v3'). Optional and backward-compatible — existing callers
+        that don't pass it leave the column NULL or unchanged on re-transcribe.
+        """
         conn = self._get_connection()
         try:
             conn.execute(
                 """UPDATE recordings
-                   SET transcript = ?, language = COALESCE(?, language), updated_at = ?
+                   SET transcript = ?,
+                       language = COALESCE(?, language),
+                       transcript_model = COALESCE(?, transcript_model),
+                       updated_at = ?
                    WHERE id = ?""",
-                (transcript, language, datetime.now().isoformat(), recording_id),
+                (transcript, language, model, datetime.now().isoformat(), recording_id),
             )
             conn.commit()
         finally:

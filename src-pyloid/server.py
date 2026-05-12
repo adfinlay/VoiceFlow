@@ -661,8 +661,41 @@ async def recordings_transcribe(*, id: int):
 
 
 @server.method()
+async def recordings_retranscribe(
+    *,
+    id: int,
+    model: Optional[str] = None,
+    device: Optional[str] = None,
+    language: Optional[str] = None,
+):
+    """Re-run transcription on an existing recording with optional overrides.
+
+    Reuses the same transcribe queue as `recordings_transcribe` — the only
+    difference is the model/device/language overrides applied for this single
+    job. Audio file is unchanged. Existing transcript + segments are replaced
+    on success. Cancellation goes through `recordings_cancel_transcribe`.
+    """
+    return get_controller().meetings.transcribe(
+        id, model=model, device=device, language=language,
+    )
+
+
+@server.method()
 async def recordings_cancel_transcribe(*, id: int):
     return get_controller().meetings.cancel_transcribe(id)
+
+
+@server.method()
+async def recordings_list_cached_models():
+    """Return all supported whisper models with their cache status, so the
+    Re-transcribe modal can offer only models that won't trigger a download.
+    """
+    manager = get_model_manager()
+    names = manager.get_available_models()
+    return [
+        {"name": name, "cached": manager.is_model_cached(name)}
+        for name in names
+    ]
 
 
 @server.method()

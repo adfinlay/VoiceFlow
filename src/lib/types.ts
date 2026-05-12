@@ -176,6 +176,7 @@ export interface Recording {
   sources: RecordingSource[];
   language: string | null;
   transcript: string | null;
+  transcriptModel: string | null;
   transcriptStatus: TranscriptStatus;
   transcriptProgress: number;
   transcriptError: string | null;
@@ -235,4 +236,9 @@ export interface RecordingJobComplete {
   recordingId: number;
   success: boolean;
   error?: string;
+}
+
+export interface CachedModel {
+  name: string;
+  cached: boolean;
 }

@@ -253,12 +253,18 @@ class MeetingsController:
         self._transcribe_q = _SerialJobQueue("transcribe", self._run_transcribe)
         self._summarize_q = _SerialJobQueue("summarize", self._run_summarize)
 
+        # Per-recording transcription overrides — populated by transcribe(...)
+        # when the user picks a non-default model/device/language for a single
+        # job, consumed (and cleared) by _run_transcribe. Keeping it as a
+        # side-channel dict avoids reworking _SerialJobQueue's _Job dataclass.
+        self._transcribe_overrides: dict[int, dict[str, Optional[str]]] = {}
+        self._transcribe_overrides_lock = threading.Lock()
+
         # Server-side push ticker. Replaces the old 250 ms HTTP poll the
         # dashboard used to do: while a recording is active, fire `meeting-state`
         # events at TICK_INTERVAL_MS through `self._emit` so both popup and
         # dashboard windows receive duration + peak meters without going through
         # HTTP. Stops itself when state leaves recording/paused.
-        import threading
         self._tick_stop = threading.Event()
         self._tick_thread: Optional[threading.Thread] = None
 
@@ -359,7 +365,6 @@ class MeetingsController:
     def _start_tick(self) -> None:
         """Kick off the background tick thread that pushes meeting-state every
         TICK_INTERVAL_S while the recorder is active. Idempotent."""
-        import threading
         if self._tick_thread is not None and self._tick_thread.is_alive():
             return
         self._tick_stop.clear()
@@ -649,7 +654,28 @@ class MeetingsController:
 
     # -------------------------------------------------------------- jobs
 
-    def transcribe(self, recording_id: int) -> dict:
+    def transcribe(
+        self,
+        recording_id: int,
+        *,
+        model: Optional[str] = None,
+        device: Optional[str] = None,
+        language: Optional[str] = None,
+    ) -> dict:
+        """Enqueue a transcription job for an existing recording.
+
+        Pass `model` / `device` / `language` to override the global settings
+        for this single job (used by the Re-transcribe modal). Overrides are
+        consumed by `_run_transcribe`; on second enqueue, prior un-consumed
+        overrides for the same id are replaced.
+        """
+        if model or device or language:
+            with self._transcribe_overrides_lock:
+                self._transcribe_overrides[recording_id] = {
+                    "model": model,
+                    "device": device,
+                    "language": language,
+                }
         self._transcribe_q.enqueue(recording_id)
         self.db.update_transcript_status(recording_id, "pending", progress=0)
         return {"ok": True}
@@ -760,15 +786,23 @@ class MeetingsController:
             return
 
         self.db.update_transcript_status(rid, "transcribing", progress=0)
+
+        # Pull any per-job overrides set by transcribe(model=, device=, language=).
+        # Once consumed, they're cleared so a subsequent default-mode rerun
+        # falls back to global settings.
+        with self._transcribe_overrides_lock:
+            override = self._transcribe_overrides.pop(rid, None) or {}
         try:
             settings = self.settings.get_settings()
+            target_model = override.get("model") or settings.model or "tiny"
+            target_device = override.get("device") or settings.device or "auto"
+            target_language = override.get("language") or settings.language or "auto"
 
-            # Ensure a model is loaded — pick a sensible default if not.
-            if self.transcription._model is None:  # type: ignore[attr-defined]
-                self.transcription.load_model(
-                    settings.model or "tiny",
-                    settings.device or "auto",
-                )
+            # Always load the requested model. load_model() is idempotent —
+            # it short-circuits when the model is already loaded with the
+            # same device/compute_type, so the default no-override path is
+            # unchanged in cost.
+            self.transcription.load_model(target_model, target_device)
 
             def on_progress(p: float, text: str) -> None:
                 self.db.update_transcript_status(rid, "transcribing", progress=p)
@@ -778,7 +812,7 @@ class MeetingsController:
 
             result = self.transcription.transcribe_file(
                 str(audio_path),
-                language=settings.language or "auto",
+                language=target_language,
                 on_progress=on_progress,
                 cancel_token=job.cancel_token,
             )
@@ -792,7 +826,12 @@ class MeetingsController:
             self._emit("recording-transcribe-complete", {"recordingId": rid, "success": False, "error": str(exc)})
             return
 
-        self.db.set_recording_transcript(rid, result["text"], language=result.get("language"))
+        self.db.set_recording_transcript(
+            rid,
+            result["text"],
+            language=result.get("language"),
+            model=target_model,
+        )
         self.db.replace_recording_segments(rid, result["segments"])
 
         # Auto-rename the title from the transcript context. Best-effort —
@@ -923,6 +962,7 @@ class MeetingsController:
             "sources": rec.get("sources", []),
             "language": rec.get("language"),
             "transcript": rec.get("transcript"),
+            "transcriptModel": rec.get("transcript_model"),
             "transcriptStatus": rec.get("transcript_status", "pending"),
             "transcriptProgress": float(rec.get("transcript_progress", 0) or 0),
             "transcriptError": rec.get("transcript_error"),

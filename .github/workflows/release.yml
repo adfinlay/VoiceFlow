@@ -58,6 +58,7 @@ jobs:
 
       - name: Setup Python environment
         run: |
+          rm -rf .venv build dist
           uv python install 3.12
           uv venv --python 3.12 .venv
           uv sync
@@ -162,7 +163,9 @@ jobs:
           cache-dependency-glob: 'uv.lock'
 
       - name: Setup Python environment
+        shell: bash
         run: |
+          rm -rf .venv build dist
           uv python install 3.12
           uv venv --python 3.12 .venv
           uv sync
