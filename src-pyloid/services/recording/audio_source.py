@@ -102,12 +102,14 @@ class SoundDeviceAudioSource:
         # to the device's native rate and resample.
         candidate_rates = [self.sample_rate]
         max_input_channels = 1
+        max_output_channels = 0
         try:
             info = sd.query_devices(self._device_id)
             native = int(info.get("default_samplerate") or 0)
             if native > 0 and native not in candidate_rates:
                 candidate_rates.append(native)
             max_input_channels = max(1, int(info.get("max_input_channels") or 1))
+            max_output_channels = int(info.get("max_output_channels") or 0)
         except Exception:
             pass
         # Common fallbacks if everything else fails.
@@ -115,20 +117,26 @@ class SoundDeviceAudioSource:
             if r not in candidate_rates:
                 candidate_rates.append(r)
 
-        # Channel-count fallback. WASAPI loopback / Stereo Mix devices on
-        # Windows are stereo-only — opening with channels=1 gets rejected by
-        # PortAudio with `Invalid number of channels [PaErrorCode -9998]`,
-        # which left the meeting recorder with header-only WAV files. The
-        # downmix in _make_pa_callback below already flattens N-channel input
-        # to mono, so we just need to open the stream at whatever channel
-        # count the device supports.
+        # Channel-count fallback. WASAPI loopback / Stereo Mix on Windows
+        # captures an OUTPUT device — `sd.query_devices()` reports
+        # `max_input_channels = 0` for those, with the real channel count
+        # exposed as `max_output_channels` (typically 2). Opening with
+        # channels=1 was rejected by PortAudio with
+        #   "Invalid number of channels [PaErrorCode -9998]"
+        # leaving the meeting recorder with header-only WAV files.
+        #
+        # The downmix in _make_pa_callback below already flattens N-channel
+        # input to mono, so we just need to open the stream at the channel
+        # count PortAudio is willing to give us.
         candidate_channels: list[int] = []
         if self._loopback:
-            # Loopback first tries the device's native channel count, then
-            # falls back to 1 in the unlikely case max_input_channels was 1.
-            candidate_channels.append(max_input_channels)
-            if 1 not in candidate_channels:
-                candidate_channels.append(1)
+            # WASAPI loopback path. Try output channel count first (real
+            # answer for speaker-loopback devices), then input channel count
+            # (in case the user picked an actual capture device exposed as
+            # loopback), then mono as a last resort.
+            for cand in (max_output_channels, max_input_channels, 1):
+                if cand and cand not in candidate_channels:
+                    candidate_channels.append(cand)
         else:
             # Mic: keep prior behavior (mono first), but allow a stereo
             # fallback in case the chosen device refuses mono open.
