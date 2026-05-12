@@ -104,6 +104,14 @@ Long-form recordings with mic + system audio captured together, transcribed loca
   <img src="media/meetings-detail.png" alt="Meeting detail with summary, transcript, and audio player" width="100%">
 </p>
 
+#### Bring your own LLM
+
+The summary step is provider-agnostic. Pick a preset for the common cases (OpenAI, Groq, OpenRouter, Local Ollama) or wire up any OpenAI-compatible endpoint. API keys live in your OS keychain, never the database or logs.
+
+<p align="center">
+  <img src="media/meetings-ai-summary.png" alt="AI Summary settings — provider picker, endpoint, model, API key, connection test" width="100%">
+</p>
+
 #### Privacy posture
 
 Recording, transcription, segmentation, search, and storage are all 100% local — same as dictation. The only network call is the summary request to whichever LLM endpoint you configure (which you can leave off entirely, or point at a local Ollama). The transcript is sent in that single call; nothing else.
