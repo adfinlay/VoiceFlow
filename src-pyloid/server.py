@@ -68,6 +68,7 @@ async def update_settings(
     holdHotkeyEnabled: Optional[bool] = None,
     toggleHotkey: Optional[str] = None,
     toggleHotkeyEnabled: Optional[bool] = None,
+    recordingsAutoRenameTitle: Optional[bool] = None,
 ):
     controller = get_controller()
     kwargs = {}
@@ -100,6 +101,8 @@ async def update_settings(
         kwargs["toggleHotkey"] = toggleHotkey
     if toggleHotkeyEnabled is not None:
         kwargs["toggleHotkeyEnabled"] = toggleHotkeyEnabled
+    if recordingsAutoRenameTitle is not None:
+        kwargs["recordingsAutoRenameTitle"] = recordingsAutoRenameTitle
 
     # Check if onboarding was already complete before this update
     old_settings = controller.get_settings()
@@ -553,3 +556,154 @@ async def clear_model_cache():
     manager = get_model_manager()
     result = manager.clear_cache()
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Meetings feature — recordings + LLM config
+# Thin wrappers over AppController.meetings (MeetingsController).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@server.method()
+async def recordings_list_audio_sources():
+    return get_controller().meetings.list_audio_sources()
+
+
+@server.method()
+async def recordings_start(
+    *,
+    title: str = "",
+    mic_device_id: Optional[int] = None,
+    loopback_device_id: Optional[int] = None,
+):
+    return get_controller().meetings.start(
+        title=title or "",
+        mic_device_id=mic_device_id,
+        loopback_device_id=loopback_device_id,
+    )
+
+
+@server.method()
+async def recordings_pause():
+    return get_controller().meetings.pause()
+
+
+@server.method()
+async def recordings_resume():
+    return get_controller().meetings.resume()
+
+
+@server.method()
+async def recordings_stop():
+    return get_controller().meetings.stop()
+
+
+@server.method()
+async def recordings_get_recorder_state():
+    return get_controller().meetings.get_recorder_state()
+
+
+@server.method()
+async def recordings_preview_start(
+    *,
+    mic_device_id: Optional[int] = None,
+    loopback_device_id: Optional[int] = None,
+):
+    return get_controller().meetings.preview_start(mic_device_id, loopback_device_id)
+
+
+@server.method()
+async def recordings_preview_stop():
+    return get_controller().meetings.preview_stop()
+
+
+@server.method()
+async def recordings_preview_state():
+    return get_controller().meetings.preview_state()
+
+
+@server.method()
+async def recordings_list(*, limit: int = 100, offset: int = 0, search: Optional[str] = None):
+    return get_controller().meetings.list_recordings(limit=limit, offset=offset, search=search)
+
+
+@server.method()
+async def recordings_get(*, id: int):
+    rec = get_controller().meetings.get_recording(id)
+    if rec is None:
+        raise ValueError(f"recording {id} not found")
+    return rec
+
+
+@server.method()
+async def recordings_update(*, id: int, fields: dict):
+    return get_controller().meetings.update_recording(id, fields or {})
+
+
+@server.method()
+async def recordings_delete(*, id: int):
+    return get_controller().meetings.delete_recording(id)
+
+
+@server.method()
+async def recordings_import_file(*, file_path: str, title: Optional[str] = None):
+    return get_controller().meetings.import_file(file_path, title)
+
+
+@server.method()
+async def recordings_export(*, id: int, format: str):
+    return get_controller().meetings.export(id, format)
+
+
+@server.method()
+async def recordings_transcribe(*, id: int):
+    return get_controller().meetings.transcribe(id)
+
+
+@server.method()
+async def recordings_cancel_transcribe(*, id: int):
+    return get_controller().meetings.cancel_transcribe(id)
+
+
+@server.method()
+async def recordings_summarize(*, id: int, prompt: Optional[str] = None):
+    return get_controller().meetings.summarize(id, prompt)
+
+
+@server.method()
+async def recordings_cancel_summarize(*, id: int):
+    return get_controller().meetings.cancel_summarize(id)
+
+
+@server.method()
+async def llm_get_config():
+    return get_controller().meetings.get_llm_config()
+
+
+@server.method()
+async def llm_set_config(
+    *,
+    preset: Optional[str] = None,
+    endpoint: Optional[str] = None,
+    model: Optional[str] = None,
+    apiKey: Optional[str] = None,
+    promptTemplate: Optional[str] = None,
+    hasApiKey: Optional[bool] = None,  # accepted but ignored - boolean view only
+):
+    return get_controller().meetings.set_llm_config(
+        preset=preset,
+        endpoint=endpoint,
+        model=model,
+        apiKey=apiKey,
+        promptTemplate=promptTemplate,
+    )
+
+
+@server.method()
+async def llm_test_connection(*, preset: str, endpoint: str, apiKey: Optional[str] = None):
+    return get_controller().meetings.test_llm_connection(preset, endpoint, apiKey)
+
+
+@server.method()
+async def llm_list_models(*, preset: str, endpoint: str, apiKey: Optional[str] = None):
+    return get_controller().meetings.list_llm_models(preset, endpoint, apiKey)

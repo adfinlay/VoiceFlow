@@ -57,23 +57,58 @@ if sys.platform.startswith('linux'):
     # Disable accessibility scanning — major perf bottleneck on Linux with large HTML pages
     os.environ.setdefault('QTWEBENGINE_ENABLE_LINUX_ACCESSIBILITY', '0')
 
-    # Force Qt WebEngine to use GPU rendering instead of Pyloid's software fallback
-    # The libEGL/Vulkan warnings trigger Pyloid to switch to software backend,
-    # but the GPU actually works — the warnings are benign on modern NVIDIA+Wayland.
-    os.environ.setdefault('QTWEBENGINE_CHROMIUM_FLAGS',
-        '--enable-features=WebRTCPipeWireCapturer '
-        '--ignore-certificate-errors --allow-insecure-localhost '
-        '--disable-gpu-driver-bug-workarounds '
-        '--enable-gpu-rasterization '
-        '--enable-native-gpu-memory-buffers '
-        '--use-gl=egl '
-        '--disable-gpu-sandbox'
-    )
-
 from pyloid.tray import TrayEvent
 from pyloid.utils import get_production_path, is_production
 from pyloid.serve import pyloid_serve
 from pyloid import Pyloid
+
+# Override QTWEBENGINE_CHROMIUM_FLAGS **after** importing pyloid. pyloid.pyloid
+# unconditionally assigns this env var at module-import time (clobbering anything
+# we set earlier with setdefault), so we re-assign here using direct `=` to win.
+# Qt WebEngine reads this env var when QApplication is constructed (which happens
+# inside `Pyloid(...)` below), so as long as our assignment lands before that,
+# the flags take effect.
+#
+# We keep pyloid's three baseline flags and add the throttling-disable flags.
+# We deliberately do NOT pass GL-control flags (--use-gl, --disable-gpu-sandbox,
+# --enable-gpu-rasterization, etc.) here: by this point pyloid's import has
+# already initialised Qt's GL platform negotiation, so forcing --use-gl=egl
+# trips "Only --use-gl=angle is supported on this platform" and crashes startup
+# on Wayland/NVIDIA. Those GPU flags were never actually taking effect before
+# the clobber fix either — pyloid was wiping them — so the app has been running
+# without them all along.
+#
+# The `--disable-background-timer-throttling --disable-renderer-backgrounding
+# --disable-features=CalculateNativeWinOcclusion` flags are essential for the
+# Meetings recorder: without them, Chromium throttles setInterval to ~once per
+# minute when the VoiceFlow window loses focus, freezing the timer and level
+# meters even though the backend keeps recording. Same flags Discord, Slack, and
+# VS Code use for the same reason.
+#
+# `--disable-background-networking` and `--disable-backgrounding-occluded-windows`
+# cover a separate failure mode: Chromium tears down network sockets in
+# backgrounded renderers, which made the dashboard's pyloid-js fetch() calls
+# fail with "TypeError: Failed to fetch" after a few seconds — breaking the
+# Stop & save button even while the popup pill (which uses the Qt JS bridge,
+# not HTTP) kept updating correctly.
+if sys.platform.startswith('linux'):
+    # `--disable-features=` only takes ONE value when re-specified — multiple
+    # `--disable-features` flags overwrite each other, so we comma-separate.
+    # `IntensiveWakeUpThrottling` is the Chromium feature that kicks in after
+    # ~5 min of session time and reduces timer wake-ups to ~1 Hz regardless of
+    # `--disable-background-timer-throttling`. Without disabling it, the
+    # Meetings dashboard freezes after a few minutes of recording even when
+    # the window is in the foreground.
+    os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = (
+        '--enable-features=WebRTCPipeWireCapturer '
+        '--ignore-certificate-errors --allow-insecure-localhost '
+        '--disable-background-timer-throttling '
+        '--disable-renderer-backgrounding '
+        '--disable-backgrounding-occluded-windows '
+        '--disable-background-networking '
+        '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling'
+    )
+    print(f"[DEBUG] QTWEBENGINE_CHROMIUM_FLAGS = {os.environ['QTWEBENGINE_CHROMIUM_FLAGS']}", flush=True)
 
 from PySide6.QtCore import QObject, Signal, Qt
 from PySide6.QtWidgets import QWidget
@@ -96,6 +131,10 @@ class ThreadSafeSignals(QObject):
     recording_stopped = Signal()
     transcription_complete = Signal(str)
     amplitude_changed = Signal(float)
+    # Meeting recorder state changes — payload is {state, durationMs}.
+    # Routed to the popup window so the user sees a "MEETING" indicator
+    # whenever the long-form recorder is active, distinct from PTT.
+    meeting_state_changed = Signal(dict)
 
 
 # Global signal emitter instance (created after QApplication)
@@ -200,6 +239,22 @@ def open_settings():
     # Frontend will handle showing settings tab via URL hash or event
 
 
+def stop_active_meeting():
+    """Tray-menu fallback for stopping a meeting recording when the dashboard
+    renderer's fetch is dead (Chromium freezes the QtWebEngine renderer's
+    network pipeline after a while of being occluded/unfocused on this
+    Wayland+NVIDIA stack). Runs directly in the Qt main thread, no HTTP
+    involved — so this path is throttling-immune."""
+    try:
+        controller = get_controller()
+        controller.meetings.stop()
+        log.info("tray: stopped active meeting recording")
+    except Exception as exc:
+        # No active recording, or already stopped — both are fine, just log
+        # so the user knows the click was acknowledged.
+        log.info("tray: stop meeting no-op", error=str(exc))
+
+
 # Tray setup
 app.set_tray_actions({
     TrayEvent.DoubleClick: show_dashboard,
@@ -207,6 +262,7 @@ app.set_tray_actions({
 
 app.set_tray_menu_items([
     {"label": "Open Dashboard", "callback": show_dashboard},
+    {"label": "Stop active recording", "callback": stop_active_meeting},
     {"label": "Settings", "callback": open_settings},
     {"label": "Quit", "callback": app.quit},
 ])
@@ -412,6 +468,66 @@ def on_recording_stop():
     if _signals:
         _signals.recording_stopped.emit()
 
+
+def _on_meeting_state_slot(payload):
+    """Slot: meeting recorder state event - runs on main thread via signal.
+
+    Fans the event out to both windows over Qt WebChannel (`window.invoke`):
+      - Popup: gets a translated `popup-state` event sized for the floating pill.
+      - Dashboard: gets the raw `meeting-state` event (state + durationMs +
+        recordingId + peak meters), used by MeetingRecorderContext in place of
+        the old HTTP polling. This transport survives Chromium renderer
+        freezes, which is the whole reason we moved off polling."""
+    payload = payload or {}
+    state = payload.get("state", "idle")
+    duration_ms = int(payload.get("durationMs") or 0)
+
+    # Dashboard gets the raw payload regardless of state — including idle,
+    # so the recorder context can react to stop events too.
+    send_main_window_event("meeting-state", payload)
+
+    if state == "idle":
+        # End of meeting — return popup to its normal idle.
+        global _last_meeting_log_state
+        _last_meeting_log_state = None
+        log.info("Meeting ended", duration_ms=duration_ms)
+        resize_popup(POPUP_IDLE_WIDTH, POPUP_IDLE_HEIGHT)
+        send_popup_event("popup-state", {"state": "idle"})
+        return
+    # Throttle the popup-pill log line — the tick now fires this 4 Hz.
+    # We only log on actual state transitions.
+    _maybe_log_meeting_state(state, duration_ms)
+    # Use the wider active pill so the duration counter has room.
+    resize_popup(POPUP_ACTIVE_WIDTH, POPUP_ACTIVE_HEIGHT)
+    send_popup_event(
+        "popup-state",
+        {
+            "state": "meeting-recording" if state == "recording" else "meeting-paused",
+            "durationMs": duration_ms,
+        },
+    )
+
+
+# Tracks the last (state, popup-resize-bucket) we logged so the 4 Hz tick
+# doesn't fill the log with identical lines. Only transitions are noisy.
+_last_meeting_log_state: "str | None" = None
+
+
+def _maybe_log_meeting_state(state: str, duration_ms: int) -> None:
+    global _last_meeting_log_state
+    if state == _last_meeting_log_state:
+        return
+    _last_meeting_log_state = state
+    log.info("Meeting state", state=state, duration_ms=duration_ms)
+
+
+def on_meeting_state(name, payload):
+    """Called from MeetingsController's event_emitter on a background thread.
+    Filters to meeting-state events and hands off to the main Qt thread."""
+    if name != "meeting-state" or not _signals:
+        return
+    _signals.meeting_state_changed.emit(payload or {})
+
 def _on_transcription_complete_slot(text: str):
     """Slot: Actual transcription complete handler - runs on main thread via signal."""
     log.info("Transcription complete", text_length=len(text))
@@ -521,6 +637,7 @@ _signals.recording_started.connect(_on_recording_start_slot, Qt.QueuedConnection
 _signals.recording_stopped.connect(_on_recording_stop_slot, Qt.QueuedConnection)
 _signals.transcription_complete.connect(_on_transcription_complete_slot, Qt.QueuedConnection)
 _signals.amplitude_changed.connect(_on_amplitude_slot, Qt.QueuedConnection)
+_signals.meeting_state_changed.connect(_on_meeting_state_slot, Qt.QueuedConnection)
 
 # Set UI callbacks
 controller.set_ui_callbacks(
@@ -529,6 +646,9 @@ controller.set_ui_callbacks(
     on_transcription_complete=on_transcription_complete,
     on_amplitude=on_amplitude,
 )
+
+# Route meeting recorder events to the popup (meeting-state pill).
+controller.set_meetings_event_emitter(on_meeting_state)
 
 # Initialize controller (load model, start hotkey listener)
 print("[DEBUG] Initializing controller...", flush=True)

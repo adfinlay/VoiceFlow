@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, History, Settings, Github, Heart, MessageSquare } from "lucide-react";
+import { Home, History, Radio, Settings, Github, Heart, MessageSquare } from "lucide-react";
 import { cn, formatHotkeyForDisplay } from "@/lib/utils";
 import { api } from "@/lib/api";
 
@@ -10,6 +10,7 @@ const FALLBACK_HOTKEY = "ctrl+win";
 const navItems = [
   { to: "/dashboard", icon: Home, label: "Home" },
   { to: "/dashboard/history", icon: History, label: "History" },
+  { to: "/dashboard/meetings", icon: Radio, label: "Meetings" },
   { to: "/dashboard/settings", icon: Settings, label: "Settings" },
 ];
 

@@ -5,11 +5,16 @@ import { Sidebar } from "@/components/Sidebar";
 import { HomePage } from "@/components/HomePage";
 import { HistoryPage } from "@/components/HistoryPage";
 import { SettingsTab } from "@/components/SettingsTab";
+import { MeetingsListPage } from "@/components/meetings/MeetingsListPage";
+import { MeetingRecorderPage } from "@/components/meetings/MeetingRecorderPage";
+import { MeetingDetailPage } from "@/components/meetings/MeetingDetailPage";
+import { MeetingRecorderProvider } from "@/components/meetings/MeetingRecorderContext";
 import { HotkeyStatusBanner } from "@/components/HotkeyStatusBanner";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet";
 
@@ -17,6 +22,7 @@ export function Dashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
+    <MeetingRecorderProvider>
     <div className="flex h-screen bg-background">
       <div className="hidden md:block">
         <Sidebar />
@@ -53,6 +59,9 @@ export function Dashboard() {
           className="p-0 w-64 bg-sidebar border-sidebar-border"
         >
           <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+          <SheetDescription className="sr-only">
+            Move between sections of VoiceFlow — Home, History, Meetings, and Settings.
+          </SheetDescription>
           <Sidebar onNavigate={() => setMobileMenuOpen(false)} />
         </SheetContent>
       </Sheet>
@@ -64,11 +73,15 @@ export function Dashboard() {
           <Routes>
             <Route index element={<HomePage />} />
             <Route path="history" element={<HistoryPage />} />
+            <Route path="meetings" element={<MeetingsListPage />} />
+            <Route path="meetings/record" element={<MeetingRecorderPage />} />
+            <Route path="meetings/:id" element={<MeetingDetailPage />} />
             <Route path="settings" element={<SettingsTab />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
       </div>
     </div>
+    </MeetingRecorderProvider>
   );
 }

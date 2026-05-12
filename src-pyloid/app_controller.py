@@ -14,6 +14,7 @@ from services.audio import AudioService
 from services.transcription import TranscriptionService
 from services.hotkey import HotkeyService
 from services.clipboard import ClipboardService
+from services.recording.controller import MeetingsController
 from services.logger import info, error, debug, warning, exception
 from services.gpu import is_cuda_available, get_gpu_name, get_cuda_compute_types, validate_device_setting, get_cudnn_status, reset_cuda_cache, has_nvidia_gpu
 from services.cudnn_downloader import download_cudnn, is_cuda_libs_installed, get_download_size_mb, get_download_progress, clear_cuda_dir
@@ -35,6 +36,21 @@ class AppController:
         self.transcription_service = TranscriptionService()
         self.hotkey_service = HotkeyService()
         self.clipboard_service = ClipboardService()
+
+        # Meetings feature — its own self-contained controller. Constructed
+        # after the shared services it depends on. See services/recording/.
+        self._meetings_event_emitter: Optional[Callable[[str, dict], None]] = None
+        self.meetings = MeetingsController(
+            db=self.db,
+            settings_service=self.settings_service,
+            transcription_service=self.transcription_service,
+            data_root=self.db.db_path.parent,
+            event_emitter=lambda name, payload: (
+                self._meetings_event_emitter(name, payload)
+                if self._meetings_event_emitter is not None
+                else None
+            ),
+        )
 
         # Model loading state
         self._model_loaded = False
@@ -73,6 +89,11 @@ class AppController:
         self._on_amplitude = on_amplitude
         self._on_error = on_error
 
+    def set_meetings_event_emitter(self, emitter: Callable[[str, dict], None]) -> None:
+        """Called from main.py once the popup-event signal pathway is ready.
+        Routes meeting transcribe/summarize/recording-state events to the frontend."""
+        self._meetings_event_emitter = emitter
+
     def initialize(self):
         """Initialize the app - load model and start hotkey listener."""
         settings = self.settings_service.get_settings()
@@ -80,6 +101,16 @@ class AppController:
         # Set initial microphone
         mic_id = settings.microphone if settings.microphone >= 0 else None
         self.audio_service.set_device(mic_id)
+
+        # Meetings: sweep any recordings that were left in 'recording' / 'paused' state
+        # from a previous unclean shutdown. Audio files survive; we just relink them
+        # and queue transcription so the user doesn't silently lose hours of audio.
+        try:
+            recovered = self.meetings.recover_unfinished()
+            if recovered:
+                info(f"Recovered {len(recovered)} unfinished recording(s) from previous session")
+        except Exception as exc:
+            warning(f"Meetings recovery sweep failed: {exc}")
 
         # Load whisper model in background
         def load_model():
@@ -240,6 +271,7 @@ class AppController:
             "toggleHotkey": settings.toggle_hotkey,
             "toggleHotkeyEnabled": settings.toggle_hotkey_enabled,
             "prependSpace": settings.prepend_space,
+            "recordingsAutoRenameTitle": settings.recordings_auto_rename_title,
         }
 
     def update_settings(self, **kwargs) -> dict:
@@ -256,6 +288,8 @@ class AppController:
             mapped["show_popup"] = kwargs["showPopup"]
         if "prependSpace" in kwargs:
             mapped["prepend_space"] = kwargs["prependSpace"]
+        if "recordingsAutoRenameTitle" in kwargs:
+            mapped["recordings_auto_rename_title"] = kwargs["recordingsAutoRenameTitle"]
         # Hotkey settings (camelCase to snake_case)
         if "holdHotkey" in kwargs:
             mapped["hold_hotkey"] = kwargs["holdHotkey"]

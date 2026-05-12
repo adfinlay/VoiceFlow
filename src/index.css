@@ -204,6 +204,31 @@
 }
 
 @layer utilities {
+    /* ───────── Meetings feature primitives ───────── */
+
+    .tabular-figs { font-feature-settings: "tnum" 1, "lnum" 1; font-variant-numeric: tabular-nums lining-nums; }
+
+    /* Live REC indicator — uses the destructive token so it tracks theme. */
+    .rec-pulse {
+        position: relative;
+        display: inline-block;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 9999px;
+        background: var(--destructive);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--destructive), transparent 65%);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .rec-pulse {
+            animation: rec-pulse 1.6s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+    }
+    @keyframes rec-pulse {
+        0%   { box-shadow: 0 0 0 0   color-mix(in srgb, var(--destructive), transparent 55%); }
+        70%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--destructive), transparent 100%); }
+        100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--destructive), transparent 100%); }
+    }
+
     /* ───────── Brand primitives ───────── */
 
     .panel {

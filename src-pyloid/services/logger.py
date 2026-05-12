@@ -14,10 +14,79 @@ Usage:
 """
 import logging
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional, Any
 from logging.handlers import RotatingFileHandler
+
+
+# ---------- Secret redaction ----------
+#
+# Defensive measures so LLM API keys, bearer tokens, etc. never reach the log file
+# or stderr — even when developers accidentally pass them as structured data.
+#
+# Two surfaces are covered:
+#   * Free-text log messages — regex-based redaction (Bearer tokens, sk-* keys).
+#   * Structured kwargs — key-name-based redaction (Authorization, api_key, …).
+
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-]{8,}\b")
+_SK_TOKEN_RE = re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b")
+_REDACTED = "***REDACTED***"
+_SENSITIVE_KEYS = {
+    "authorization",
+    "api_key", "api-key", "apikey",
+    "x_api_key", "x-api-key",
+    "password", "token", "secret",
+    "bearer",
+}
+
+
+def redact_text(message: str) -> str:
+    """Mask secret-like substrings in a free-text log message."""
+    if not isinstance(message, str):
+        return message
+    message = _BEARER_RE.sub(f"Bearer {_REDACTED}", message)
+    message = _SK_TOKEN_RE.sub(_REDACTED, message)
+    return message
+
+
+def redact_structured(data: Any) -> Any:
+    """Walk a dict/list and replace values under sensitive keys with REDACTED."""
+    if isinstance(data, dict):
+        out: dict = {}
+        for key, value in data.items():
+            if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS:
+                out[key] = _REDACTED
+            else:
+                out[key] = redact_structured(value)
+        return out
+    if isinstance(data, list):
+        return [redact_structured(item) for item in data]
+    if isinstance(data, str):
+        return redact_text(data)
+    return data
+
+
+class RedactionFilter(logging.Filter):
+    """Mutates LogRecord in place so handlers only see redacted content."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Free-text message (preserve args semantics: redact the final string).
+        try:
+            rendered = record.getMessage()
+        except Exception:
+            rendered = str(record.msg)
+        redacted = redact_text(rendered)
+        if redacted != rendered:
+            record.msg = redacted
+            record.args = ()  # already-formatted; don't let logging re-apply args
+
+        # Structured data attached by DomainLogger.
+        structured = getattr(record, "structured_data", None)
+        if structured is not None:
+            record.structured_data = redact_structured(structured)
+        return True
 
 
 # Configuration constants
@@ -153,6 +222,9 @@ def setup_logging(
     # Create formatter
     formatter = HybridFormatter()
 
+    # Redaction filter applied to every handler so secrets never reach disk/stderr.
+    redaction_filter = RedactionFilter()
+
     # Create file handler with rotation
     _file_handler = RotatingFileHandler(
         log_file,
@@ -162,11 +234,13 @@ def setup_logging(
     )
     _file_handler.setLevel(logging.DEBUG)
     _file_handler.setFormatter(formatter)
+    _file_handler.addFilter(redaction_filter)
 
     # Create console handler for development
     _console_handler = logging.StreamHandler(sys.stderr)
     _console_handler.setLevel(logging.DEBUG)
     _console_handler.setFormatter(formatter)
+    _console_handler.addFilter(redaction_filter)
 
     # Set up root logger for VoiceFlow
     root_logger = logging.getLogger("VoiceFlow")

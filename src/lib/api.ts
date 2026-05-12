@@ -1,5 +1,24 @@
 import { rpc } from "pyloid-js";
-import type { Settings, HistoryEntry, Options, Stats, ModelInfo, HotkeyValidation, GpuInfo, DeviceValidation, CudnnDownloadInfo, CudnnDownloadResult, CudnnDownloadProgress } from "./types";
+import type {
+  Settings,
+  HistoryEntry,
+  Options,
+  Stats,
+  ModelInfo,
+  HotkeyValidation,
+  GpuInfo,
+  DeviceValidation,
+  CudnnDownloadInfo,
+  CudnnDownloadResult,
+  CudnnDownloadProgress,
+  AudioSourceList,
+  RecorderState,
+  Recording,
+  RecordingWithSegments,
+  LLMConfig,
+  LLMPreset,
+  LLMTestResult,
+} from "./types";
 
 export const api = {
   async getSettings(): Promise<Settings> {
@@ -148,5 +167,147 @@ export const api = {
 
   async clearCudaLibs(): Promise<{ success: boolean }> {
     return rpc.call("clear_cuda_libs");
+  },
+
+  // ───── Recordings (Meetings feature) ─────────────────────────────────────
+
+  async recordingsListAudioSources(): Promise<AudioSourceList> {
+    return rpc.call("recordings_list_audio_sources");
+  },
+
+  async recordingsStart(
+    title: string,
+    micDeviceId: number | null,
+    loopbackDeviceId: number | null,
+  ): Promise<{ recording_id: number }> {
+    return rpc.call("recordings_start", {
+      title,
+      mic_device_id: micDeviceId,
+      loopback_device_id: loopbackDeviceId,
+    });
+  },
+
+  async recordingsPause(): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_pause");
+  },
+
+  async recordingsResume(): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_resume");
+  },
+
+  async recordingsStop(): Promise<Recording> {
+    return rpc.call("recordings_stop");
+  },
+
+  async recordingsGetRecorderState(): Promise<RecorderState> {
+    return rpc.call("recordings_get_recorder_state");
+  },
+
+  async recordingsPreviewStart(
+    micDeviceId: number | null,
+    loopbackDeviceId: number | null,
+  ): Promise<{ ok: boolean; reason?: string }> {
+    return rpc.call("recordings_preview_start", {
+      mic_device_id: micDeviceId,
+      loopback_device_id: loopbackDeviceId,
+    });
+  },
+
+  async recordingsPreviewStop(): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_preview_stop");
+  },
+
+  async recordingsPreviewState(): Promise<{
+    active: boolean;
+    hasMic: boolean;
+    hasLoopback: boolean;
+    micPeakDb: number | null;
+    loopbackPeakDb: number | null;
+  }> {
+    return rpc.call("recordings_preview_state");
+  },
+
+  async recordingsList(
+    limit = 100,
+    offset = 0,
+    search?: string,
+  ): Promise<Recording[]> {
+    return rpc.call("recordings_list", { limit, offset, search });
+  },
+
+  async recordingsGet(id: number): Promise<RecordingWithSegments> {
+    return rpc.call("recordings_get", { id });
+  },
+
+  async recordingsUpdate(
+    id: number,
+    fields: Partial<
+      Pick<Recording, "title" | "summary" | "notes" | "tags" | "language">
+    >,
+  ): Promise<Recording> {
+    return rpc.call("recordings_update", { id, fields });
+  },
+
+  async recordingsDelete(id: number): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_delete", { id });
+  },
+
+  async recordingsImportFile(
+    filePath: string,
+    title?: string,
+  ): Promise<{ recording_id: number }> {
+    return rpc.call("recordings_import_file", { file_path: filePath, title });
+  },
+
+  async recordingsExport(
+    id: number,
+    format: "txt" | "md" | "json" | "srt",
+  ): Promise<{ path: string }> {
+    return rpc.call("recordings_export", { id, format });
+  },
+
+  async recordingsTranscribe(id: number): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_transcribe", { id });
+  },
+
+  async recordingsCancelTranscribe(id: number): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_cancel_transcribe", { id });
+  },
+
+  async recordingsSummarize(
+    id: number,
+    prompt?: string,
+  ): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_summarize", { id, prompt });
+  },
+
+  async recordingsCancelSummarize(id: number): Promise<{ ok: boolean }> {
+    return rpc.call("recordings_cancel_summarize", { id });
+  },
+
+  async llmGetConfig(): Promise<LLMConfig> {
+    return rpc.call("llm_get_config");
+  },
+
+  async llmSetConfig(
+    config: Partial<LLMConfig> & { apiKey?: string },
+  ): Promise<{ ok: boolean }> {
+    return rpc.call("llm_set_config", config);
+  },
+
+  async llmTestConnection(
+    preset: LLMPreset,
+    endpoint: string,
+    apiKey?: string,
+  ): Promise<LLMTestResult> {
+    return rpc.call("llm_test_connection", { preset, endpoint, apiKey });
+  },
+
+  async llmListModels(
+    preset: LLMPreset,
+    endpoint: string,
+    apiKey?: string,
+  ): Promise<string[]> {
+    return rpc.call("llm_list_models", { preset, endpoint, apiKey });
   },
 };
