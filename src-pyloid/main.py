@@ -28,6 +28,11 @@ if sys.platform.startswith('linux'):
     except Exception:
         pass  # Best-effort, don't crash on failure
 
+    # Imported lazily because services/* depends on env that we still need to
+    # configure below; keep the import inside the linux block so non-linux
+    # platforms don't pay the cost.
+    from services.process_env import system_env as _system_env_for_hyprctl
+
     def _setup_hyprland_window_rules():
         """Set Hyprland window rules for the popup overlay if running under Hyprland.
 
@@ -61,11 +66,15 @@ if sys.platform.startswith('linux'):
             "opacity 1.0 override 1.0 override,title:^(Recording)$",
             "move onscreen 50%-w/2 100%-h-100,title:^(Recording)$",
         ]
+        # Strip PyInstaller LD_LIBRARY_PATH/LD_PRELOAD before spawning
+        # hyprctl — without this, the AppImage's bundled libstdc++ shadows
+        # the system one and hyprctl fails with `GLIBCXX_3.4.32 not found`.
+        env = _system_env_for_hyprctl()
         for rule in rules:
             try:
                 result = subprocess.run(
                     ['hyprctl', 'keyword', 'windowrulev2', rule],
-                    capture_output=True, timeout=2, text=True,
+                    capture_output=True, timeout=2, text=True, env=env,
                 )
                 if result.returncode != 0:
                     print(f"[WARN] hyprctl rejected rule {rule!r}: {result.stderr.strip() or result.stdout.strip()}",
@@ -358,14 +367,19 @@ def _hypr_dispatch(*args: str) -> None:
     Used at runtime to move/resize the floating popup whenever it changes
     state (idle ↔ active), since Qt's `set_position()` is silently dropped on
     Wayland — the compositor is the only authority on window placement.
+
+    Subprocess env is scrubbed via services.process_env.system_env() so the
+    AppImage's bundled libstdc++ doesn't shadow the system one and break
+    hyprctl with `GLIBCXX_3.4.32 not found` symbol errors.
     """
     if not _is_hyprland():
         return
     import subprocess
+    from services.process_env import system_env
     try:
         result = subprocess.run(
             ['hyprctl', 'dispatch', *args],
-            capture_output=True, timeout=2, text=True,
+            capture_output=True, timeout=2, text=True, env=system_env(),
         )
         if result.returncode != 0:
             log.warning("hyprctl dispatch failed",
