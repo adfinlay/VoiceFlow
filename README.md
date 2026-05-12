@@ -1,11 +1,17 @@
-<p align="center">
-  <img src="media/dashboard.png" alt="VoiceFlow dashboard" width="100%">
-</p>
-
-<h1 align="center">VoiceFlow</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/logo-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="media/logo-light.png">
+    <img src="media/logo-dark.png" alt="VoiceFlow" width="320">
+  </picture>
+</h1>
 
 <p align="center">
   Hold a hotkey. Speak. Release. The transcript pastes itself at your cursor.
+</p>
+
+<p align="center">
+  <img src="media/dashboard.png" alt="VoiceFlow dashboard" width="100%">
 </p>
 
 <p align="center">
