@@ -56,6 +56,11 @@ class AppController:
         self._model_loaded = False
         self._model_loading = False
 
+        # Shutdown is wired from both QApplication.aboutToQuit and the
+        # post-app.run() path in main.py; this guard makes a second call a
+        # no-op instead of double-stopping the hotkey listener.
+        self._shutdown_done = False
+
         # Popup enabled state (disabled during onboarding)
         self._popup_enabled = True
 
@@ -144,7 +149,11 @@ class AppController:
         self.db.clear_old_history(settings.retention)
 
     def shutdown(self):
-        """Clean shutdown."""
+        """Clean shutdown. Idempotent — wired from both QApplication.aboutToQuit
+        and main.py's post-app.run() path, so it can fire twice on a normal exit."""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         self.hotkey_service.stop()
         self.transcription_service.unload_model()
 

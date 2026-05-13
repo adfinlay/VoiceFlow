@@ -171,7 +171,7 @@ if sys.platform.startswith('linux'):
     print(f"[DEBUG] QTWEBENGINE_CHROMIUM_FLAGS = {os.environ['QTWEBENGINE_CHROMIUM_FLAGS']}", flush=True)
 
 from PySide6.QtCore import QObject, Signal, Qt
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from server import server, register_onboarding_complete_callback, register_data_reset_callback, register_window_actions, register_download_progress_callback, register_popup_visibility_callback
 from app_controller import get_controller
@@ -271,6 +271,12 @@ if not ensure_single_instance():
 print("[DEBUG] Creating Pyloid app...", flush=True)
 app = Pyloid(app_name="VoiceFlow", single_instance=True, server=server)
 print("[DEBUG] Pyloid app created", flush=True)
+
+# Tray-resident daemon: closing the dashboard window must NOT quit the app.
+# Qt's default is True, which combined with Qt WebEngine's built-in Ctrl+W
+# turns "close window" into "kill the daemon" — global hotkey dies, model
+# reloads on respawn. The tray "Quit" item remains the only true exit.
+QApplication.instance().setQuitOnLastWindowClosed(False)
 
 # Install the voiceflow:// handler on the default profile. The scheme itself
 # was registered above (before QApplication). The handler must outlive every
@@ -823,10 +829,25 @@ else:
     # Dev: Standard Frame
     window = app.create_window(title="VoiceFlow", dev_tools=False, frame=True, transparent=False)
     # try:
-    #     window._window.web_view.page().setBackgroundColor(QColor(0, 0, 0, 0)) 
+    #     window._window.web_view.page().setBackgroundColor(QColor(0, 0, 0, 0))
     # except Exception as e:
     #     error(f"Failed to set transparent background: {e}")
     window.load_url("http://localhost:5173")
+
+# Qt-level close (native title-bar X, Ctrl+W from Qt WebEngine) routes through
+# Pyloid's BrowserWindow.closeEvent, which removes the window from
+# app.windows_dict and unconditionally calls app.quit() once the dict is empty
+# (.venv/.../pyloid/browser_window.py:1115). That bypasses
+# setQuitOnLastWindowClosed(False) — confirmed in dev: with the popup hidden
+# by preference, Ctrl+W on the dashboard fires app.quit() and the daemon dies.
+# Override the QMainWindow's closeEvent so any Qt-level close just hides the
+# window — matching the frontend's close_main_window RPC path. Tray "Quit"
+# still calls app.quit() explicitly, so explicit exits are unaffected.
+def _hide_main_window_on_close(event):
+    event.ignore()
+    if window:
+        window.hide()
+window._window._window.closeEvent = _hide_main_window_on_close
 
 # Enforce Minimum Size Globally based on Screen Size
 try:
@@ -866,6 +887,13 @@ else:
     window.show()
     log.info("Showing onboarding window")
     # Don't initialize popup during onboarding
+
+# Tear down services BEFORE Qt destroys QApplication. CTranslate2's CUDA
+# worker threads need to be joined while libcuda is still loaded — running
+# this in aboutToQuit (Qt event loop still alive) avoids the SIGABRT race
+# against libcuda's own atexit handler. The post-app.run() call below stays
+# as a fallback for non-Qt exit paths; controller.shutdown() is idempotent.
+QApplication.instance().aboutToQuit.connect(controller.shutdown)
 
 print(f"[DEBUG] About to call app.run(), onboarding_complete={onboarding_complete}", flush=True)
 app.run()
