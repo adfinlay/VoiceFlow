@@ -155,6 +155,18 @@ class AppController:
             return
         self._shutdown_done = True
         self.hotkey_service.stop()
+        # Stop any active meeting recording before tearing down. parec /
+        # sounddevice hold PipeWire / PortAudio handles that, if leaked, can
+        # corrupt the global audio routing graph (observed: Teams loses
+        # inbound audio after a VoiceFlow wedge + window close). Failure is
+        # tolerated — recover_unfinished() on the next startup will pick up
+        # any partial recording.
+        try:
+            if self.meetings.recorder.get_state()["state"] != "idle":
+                info("Shutdown: stopping active meeting recording")
+                self.meetings.stop()
+        except Exception as exc:
+            warning(f"Shutdown: failed to stop active meeting: {exc}")
         self.transcription_service.unload_model()
 
     def _handle_hotkey_activate(self):

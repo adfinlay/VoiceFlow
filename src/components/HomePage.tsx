@@ -54,14 +54,23 @@ export function HomePage() {
   }, []);
 
   // Sync recording state with backend (covers hotkey-driven starts).
+  // In-flight guard prevents request stacking when the RPC server slows
+  // (observed: during long meeting recordings the asyncio RPC thread became
+  // sluggish; without this guard, getRecordingState calls accumulated and
+  // saturated aiohttp's accept queue, wedging the whole HTTP server).
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
     const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const state = await api.getRecordingState();
         if (!cancelled) setIsRecording(state.recording);
       } catch {
         // backend may not be ready yet
+      } finally {
+        inFlight = false;
       }
     };
     tick();

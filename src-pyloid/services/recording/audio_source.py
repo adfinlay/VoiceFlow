@@ -270,6 +270,17 @@ class ParecAudioSource:
             )
         self._callback = on_frames
         self._stopped = False
+        # NOTE: do not pass preexec_fn here. We previously used it to set
+        # PR_SET_PDEATHSIG so parec would die with the parent — but
+        # preexec_fn is documented as unsafe in a multithreaded process
+        # (subprocess docs: the child can deadlock before exec if it
+        # inherits a held lock from another thread). VoiceFlow has many
+        # threads (writer, hotkey, asyncio RPC, transcribe queue, etc.)
+        # and that deadlock fired in the field on Bluetooth source
+        # selection — wedged the entire asyncio loop and corrupted
+        # PipeWire routing. Rely instead on controller.shutdown() (wired
+        # to QApplication.aboutToQuit) to kill parec on every normal exit
+        # path. Orphan parec on SIGKILL is the accepted trade-off.
         self._proc = subprocess.Popen(
             [
                 "parec",
