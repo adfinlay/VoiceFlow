@@ -278,6 +278,25 @@ print("[DEBUG] Pyloid app created", flush=True)
 # reloads on respawn. The tray "Quit" item remains the only true exit.
 QApplication.instance().setQuitOnLastWindowClosed(False)
 
+# Patch pyloid.Pyloid.get_window_by_id to bypass its cross-thread Qt
+# roundtrip. pyloid-rpc validates the window_id on EVERY RPC request
+# (rpc.py:518) by calling self.pyloid.get_window_by_id(request_id), which
+# uses execute_command() — that emits a Qt signal to the main thread and
+# runs a nested QEventLoop.exec() in the asyncio RPC thread, with NO
+# timeout, waiting for the Qt main thread to reply. If the Qt main thread
+# is even briefly busy (WebEngine IPC, queued window.invoke calls during
+# an active meeting recording, etc.), the asyncio thread wedges forever
+# and every subsequent RPC request stacks up in aiohttp's accept queue
+# (observed in the field: LISTEN 4 128 with the Stop button dead while
+# the writer thread + WebChannel kept ticking). The Qt-side handler is
+# literally just `self.app.windows_dict.get(window_id)` (pyloid.py:2117,
+# 597), so we can do it directly from the asyncio thread — dict.get() is
+# atomic under the GIL.
+import types as _types
+def _fast_get_window_by_id(self, window_id):
+    return self.app.windows_dict.get(window_id)
+app.get_window_by_id = _types.MethodType(_fast_get_window_by_id, app)
+
 # Install the voiceflow:// handler on the default profile. The scheme itself
 # was registered above (before QApplication). The handler must outlive every
 # request, so we hold a module-level reference — Qt holds a non-owning ref.
