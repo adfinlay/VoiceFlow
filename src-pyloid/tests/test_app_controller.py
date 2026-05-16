@@ -33,6 +33,7 @@ def controller(temp_db):
     ctrl._on_transcription_complete = None
     ctrl._on_amplitude = None
     ctrl._on_error = None
+    ctrl._shutdown_done = False
 
     yield ctrl
 
@@ -144,4 +145,13 @@ class TestAppController:
 
         controller.shutdown()
 
+        assert controller.hotkey_service.is_running() == False
+
+    def test_shutdown_is_idempotent(self, controller):
+        """shutdown can be called twice — wired from both aboutToQuit and the
+        post-app.run() path in main.py."""
+        controller.hotkey_service.start()
+        controller.shutdown()
+        # Second call must not raise; service must still be stopped.
+        controller.shutdown()
         assert controller.hotkey_service.is_running() == False

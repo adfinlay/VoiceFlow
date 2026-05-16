@@ -56,6 +56,11 @@ class AppController:
         self._model_loaded = False
         self._model_loading = False
 
+        # Shutdown is wired from both QApplication.aboutToQuit and the
+        # post-app.run() path in main.py; this guard makes a second call a
+        # no-op instead of double-stopping the hotkey listener.
+        self._shutdown_done = False
+
         # Popup enabled state (disabled during onboarding)
         self._popup_enabled = True
 
@@ -144,8 +149,24 @@ class AppController:
         self.db.clear_old_history(settings.retention)
 
     def shutdown(self):
-        """Clean shutdown."""
+        """Clean shutdown. Idempotent — wired from both QApplication.aboutToQuit
+        and main.py's post-app.run() path, so it can fire twice on a normal exit."""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         self.hotkey_service.stop()
+        # Stop any active meeting recording before tearing down. parec /
+        # sounddevice hold PipeWire / PortAudio handles that, if leaked, can
+        # corrupt the global audio routing graph (observed: Teams loses
+        # inbound audio after a VoiceFlow wedge + window close). Failure is
+        # tolerated — recover_unfinished() on the next startup will pick up
+        # any partial recording.
+        try:
+            if self.meetings.recorder.get_state()["state"] != "idle":
+                info("Shutdown: stopping active meeting recording")
+                self.meetings.stop()
+        except Exception as exc:
+            warning(f"Shutdown: failed to stop active meeting: {exc}")
         self.transcription_service.unload_model()
 
     def _handle_hotkey_activate(self):

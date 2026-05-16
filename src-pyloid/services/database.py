@@ -20,9 +20,16 @@ class DatabaseService:
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        # timeout=5.0 + busy_timeout=5000 means SQLite returns SQLITE_BUSY
+        # after 5s of lock contention instead of blocking the asyncio RPC
+        # thread indefinitely. RPC handlers like get_history / get_stats are
+        # `async def` but call sync sqlite synchronously — without a timeout,
+        # a long-held write lock from another connection could wedge the
+        # whole HTTP RPC server.
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
     def _init_db(self):
