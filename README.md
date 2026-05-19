@@ -21,14 +21,18 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
-  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0"><img src="https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux"></a>
   <a href="https://get-voice-flow.vercel.app/"><img src="https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Website"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"></a>
 </p>
 
 <p align="center">
-  <sub>Latest: <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1"><code>v1.6.0-rc1</code></a> (pre-release) · <a href="https://github.com/infiniV/VoiceFlow/releases">all releases</a></sub>
+  <sub>Latest: <a href="https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0"><code>v1.6.0</code></a> · <a href="https://github.com/infiniV/VoiceFlow/releases">all releases</a></sub>
+</p>
+
+<p align="center">
+  <b>New in v1.6.0 — <a href="#meetings">Meetings</a>:</b> long-form recording with mic + system audio, local transcription, and bring-your-own-LLM summaries.
 </p>
 
 ---
@@ -38,6 +42,24 @@
 VoiceFlow lives in your system tray. Hold a global hotkey, a small popup pops up with a live amplitude meter, you talk, you release, and the transcript is typed at the cursor. That's it.
 
 The inference runs on your machine through [faster-whisper](https://github.com/SYSTRAN/faster-whisper). CUDA when you have it, CPU when you don't. The audio never touches a network socket.
+
+<h2 id="meetings">Meetings <sub><sup>new in v1.6.0</sup></sub></h2>
+
+Long-form recording that captures your mic plus system audio (Zoom, Meet, anything that plays through your speakers) into one stereo file, transcribes it locally with Whisper, and runs the summary through an LLM provider you choose.
+
+<p align="center">
+  <img src="media/meetings-detail.png" alt="Meeting detail with transcript, summary, and audio player" width="100%">
+</p>
+
+- **System audio + mic in one file.** Stereo capture via WASAPI loopback (Windows) and PipeWire/PulseAudio (Linux).
+- **Pause, resume, stop** from the dashboard or the tray menu — recording survives across hour-long calls.
+- **Re-transcribe** any saved recording with a different model, device, or language without re-recording.
+- **Bring your own LLM.** OpenAI, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. Keys live in your OS keychain.
+- **Auto-rename** from a default timestamp to a real topic once the transcript lands.
+- **Export** to Markdown, plain text, SRT, or structured JSON.
+- **Built-in playback** via the `voiceflow://` URL scheme — jump straight from any transcript line into the audio.
+
+Recording, transcription, search, and storage stay local. The only network call is the optional summary request — skip it, point it at a local Ollama, or send it to a provider you already pay for.
 
 ## Features
 
@@ -49,22 +71,6 @@ The inference runs on your machine through [faster-whisper](https://github.com/S
 - **99+ languages.** Whisper handles language detection automatically.
 - **Searchable history.** SQLite log of every transcript, stored at `~/.VoiceFlow/`.
 - **Dark mode by default.** Light and system themes if you want them.
-
-## Meetings (experimental)
-
-New in [`v1.6.0-rc1`](https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1). Long-form recording that captures mic input plus system audio (Zoom, Meet, anything that plays through your speakers) into one stereo file, transcribes it locally, and lets you bring your own LLM for the summary.
-
-<p align="center">
-  <img src="media/meetings-detail.png" alt="Meeting detail with transcript, summary, and audio player" width="100%">
-</p>
-
-- Pause, resume, and stop from the dashboard or the tray menu.
-- Re-transcribe any saved recording with a different model, device, or language without re-recording.
-- Bring your own LLM provider: OpenAI, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. API keys are stored in your OS keychain.
-- Export to Markdown, plain text, SRT, or structured JSON.
-- Auto-rename from a default timestamp to a real topic once the transcript is in.
-
-Recording, transcription, search, and storage stay local. The only network call is the optional summary request, and you can skip it, point it at a local Ollama, or send it to a provider you already pay for.
 
 ## VoiceFlow vs cloud dictation
 
@@ -78,7 +84,7 @@ Recording, transcription, search, and storage stay local. The only network call 
 
 ## Install
 
-Grab the latest binary from [Releases](https://github.com/infiniV/VoiceFlow/releases) — currently [`v1.6.0-rc1`](https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0-rc1) (pre-release):
+Grab the latest binary from [Releases](https://github.com/infiniV/VoiceFlow/releases) — currently [`v1.6.0`](https://github.com/infiniV/VoiceFlow/releases/tag/v1.6.0):
 
 - **Windows 10/11**: `.exe` installer (Inno Setup)
 - **Linux**: `.AppImage` or `.tar.gz`
