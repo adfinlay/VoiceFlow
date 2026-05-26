@@ -76,6 +76,13 @@ const THEME_ICONS: Record<string, React.ElementType> = {
   system: Monitor,
 };
 
+const IS_LINUX =
+  ((navigator as unknown as { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.userAgent).includes("Linux");
+
+// Where the backend binds the control socket. Mirrors
+// services/control_socket.default_socket_path() — keep these in sync.
+const CONTROL_SOCKET_PATH = "$XDG_RUNTIME_DIR/voiceflow/control.sock";
+
 const SECTIONS = [
   { id: "transcription", num: "01", label: "transcription" },
   { id: "behavior",      num: "02", label: "behavior" },
@@ -375,6 +382,28 @@ export function SettingsTab() {
             />
           </SectionBlock>
 
+          {IS_LINUX && (
+            <ToggleRow
+              label="Use built-in global hotkey (Linux)"
+              helper={
+                settings.useEvdevHotkeys
+                  ? "On: VoiceFlow reads /dev/input/event* directly. Requires your user to be in the `input` group."
+                  : "Off: hotkey input comes through the control socket below. Safe to leave the `input` group."
+              }
+              checked={settings.useEvdevHotkeys}
+              onChange={(v) => updateSetting("useEvdevHotkeys", v)}
+            />
+          )}
+
+          {IS_LINUX && (
+            <SectionBlock
+              label="Linux control socket"
+              helper="Always available. Drive recording from a compositor keybind (i3, Sway, Hyprland) by sending a verb over a Unix socket."
+            >
+              <ControlSocketPanel />
+            </SectionBlock>
+          )}
+
           <ToggleRow
             label="Floating recording indicator"
             helper="Shows a small pill at the bottom of your screen while recording. Hide it for a quieter experience — recording still works."
@@ -392,6 +421,12 @@ export function SettingsTab() {
             helper="Adds a leading space before pasted text. Prevents sentences from running together when you dictate continuously."
             checked={settings.prependSpace}
             onChange={(v) => updateSetting("prependSpace", v)}
+          />
+          <ToggleRow
+            label="Paste with Ctrl+Shift+V"
+            helper="Use Ctrl+Shift+V instead of Ctrl+V. Required for terminals (gnome-terminal, alacritty, kitty) that bind Ctrl+V to other things."
+            checked={settings.pasteWithShift}
+            onChange={(v) => updateSetting("pasteWithShift", v)}
           />
           <ToggleRow
             label="Launch at login"
@@ -954,6 +989,70 @@ function ComputePanel({
           install cudnn 9.x to enable gpu acceleration
         </p>
       )}
+    </div>
+  );
+}
+
+function ControlSocketPanel() {
+  const [copied, setCopied] = useState<string | null>(null);
+  const sampleToggle = `echo toggle | socat -u - UNIX:${CONTROL_SOCKET_PATH}`;
+  const sampleStart = `echo start  | socat -u - UNIX:${CONTROL_SOCKET_PATH}`;
+  const sampleStop = `echo stop   | socat -u - UNIX:${CONTROL_SOCKET_PATH}`;
+
+  const copy = (label: string, text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(label);
+        toast.success("Copied to clipboard");
+        window.setTimeout(() => setCopied((c) => (c === label ? null : c)), 1500);
+      },
+      () => toast.error("Failed to copy"),
+    );
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-cream/[0.02] px-4 py-3 text-xs space-y-3">
+      <div>
+        <p className="uppercase tracking-widest text-[10px] text-cream-muted/70">
+          socket
+        </p>
+        <p className="font-mono text-cream mt-0.5">{CONTROL_SOCKET_PATH}</p>
+      </div>
+      <div className="space-y-2">
+        <p className="uppercase tracking-widest text-[10px] text-cream-muted/70">
+          example i3 / sway binding
+        </p>
+        {[
+          { label: "toggle (tap)", cmd: sampleToggle },
+          { label: "start (press)", cmd: sampleStart },
+          { label: "stop (release)", cmd: sampleStop },
+        ].map(({ label, cmd }) => (
+          <div key={label} className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-cream-muted/60 text-[10px] uppercase tracking-widest">
+                {label}
+              </p>
+              <code className="block font-mono text-cream/90 text-[11px] mt-0.5 break-all">
+                {cmd}
+              </code>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7 px-2 flex-shrink-0"
+              onClick={() => copy(label, cmd)}
+            >
+              {copied === label ? "copied" : "copy"}
+            </Button>
+          </div>
+        ))}
+      </div>
+      <p className="text-cream-muted/70 leading-relaxed">
+        Requires <code className="font-mono">socat</code>. For push-to-talk on
+        i3/Sway, bind <code className="font-mono">start</code> to the keypress
+        and <code className="font-mono">stop</code> to{" "}
+        <code className="font-mono">--release</code>.
+      </p>
     </div>
   );
 }

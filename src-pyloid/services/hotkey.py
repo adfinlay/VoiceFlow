@@ -191,6 +191,11 @@ class HotkeyService:
         self._hold_hotkey_enabled: bool = True
         self._toggle_hotkey: str = "ctrl+shift+win"
         self._toggle_hotkey_enabled: bool = False
+        # Linux only: when False, skip the evdev listener entirely so the
+        # app neither opens /dev/input/event* nor warns about missing input
+        # group access. The user is expected to drive recording through the
+        # control socket instead.
+        self._use_evdev: bool = True
 
         # Status tracking - exposed to UI so users see why hotkeys are silent
         self._status: dict = {"available": True, "code": "ok", "message": "", "device_count": 0}
@@ -216,6 +221,7 @@ class HotkeyService:
         hold_enabled: bool = None,
         toggle_hotkey: str = None,
         toggle_enabled: bool = None,
+        use_evdev: bool = None,
     ):
         """Update hotkey configuration and re-register handlers if running."""
         needs_restart = False
@@ -236,6 +242,9 @@ class HotkeyService:
                 needs_restart = True
         if toggle_enabled is not None and toggle_enabled != self._toggle_hotkey_enabled:
             self._toggle_hotkey_enabled = toggle_enabled
+            needs_restart = True
+        if use_evdev is not None and use_evdev != self._use_evdev:
+            self._use_evdev = use_evdev
             needs_restart = True
 
         if needs_restart and self._running:
@@ -418,6 +427,20 @@ class HotkeyService:
 
     def _register_hotkeys_evdev(self):
         """Start evdev listener thread for hotkey detection on Linux."""
+        if not self._use_evdev:
+            log.info("evdev hotkey listener disabled by user setting")
+            self._status = {
+                "available": False,
+                "code": "disabled_by_user",
+                "message": (
+                    "Built-in global hotkey is disabled. Use the control "
+                    "socket (e.g. an i3/Sway/Hyprland keybind invoking "
+                    "`socat`) to start/stop recording."
+                ),
+                "device_count": 0,
+            }
+            return
+
         log.info("Registering hotkeys via evdev")
         self._evdev_stop.clear()
         self._pressed_keys = set()

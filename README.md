@@ -67,7 +67,7 @@ Recording, transcription, search, and storage stay local. The only network call 
 - **16+ Whisper models.** Tiny (75 MB) through Large-v3 (3 GB), plus Turbo, distilled, and `.en` variants. The picker shows speed, accuracy, parameter count, and disk size for each.
 - **CUDA when available.** Auto-detects your GPU, falls back to CPU.
 - **Hold or Toggle modes.** Configurable hotkeys including modifier-only combos like `Ctrl+Win`.
-- **Wayland and X11.** Native `evdev` input on Linux, Hyprland window rules, `wl-copy` and `wtype`/`ydotool` for paste.
+- **Wayland and X11.** Native `evdev` input on Linux, Hyprland window rules, `wl-copy` and `wtype`/`ydotool` for paste. Or drive recording from your compositor's keybind via a Unix socket — see [docs/linux-control-socket.md](docs/linux-control-socket.md) — and drop the `input` group requirement entirely.
 - **99+ languages.** Whisper handles language detection automatically.
 - **Searchable history.** SQLite log of every transcript, stored at `~/.VoiceFlow/`.
 - **Dark mode by default.** Light and system themes if you want them.

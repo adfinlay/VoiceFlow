@@ -68,6 +68,9 @@ async def update_settings(
     holdHotkeyEnabled: Optional[bool] = None,
     toggleHotkey: Optional[str] = None,
     toggleHotkeyEnabled: Optional[bool] = None,
+    useEvdevHotkeys: Optional[bool] = None,
+    prependSpace: Optional[bool] = None,
+    pasteWithShift: Optional[bool] = None,
     recordingsAutoRenameTitle: Optional[bool] = None,
 ):
     controller = get_controller()
@@ -101,6 +104,12 @@ async def update_settings(
         kwargs["toggleHotkey"] = toggleHotkey
     if toggleHotkeyEnabled is not None:
         kwargs["toggleHotkeyEnabled"] = toggleHotkeyEnabled
+    if useEvdevHotkeys is not None:
+        kwargs["useEvdevHotkeys"] = useEvdevHotkeys
+    if prependSpace is not None:
+        kwargs["prependSpace"] = prependSpace
+    if pasteWithShift is not None:
+        kwargs["pasteWithShift"] = pasteWithShift
     if recordingsAutoRenameTitle is not None:
         kwargs["recordingsAutoRenameTitle"] = recordingsAutoRenameTitle
 

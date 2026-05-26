@@ -87,31 +87,56 @@ class ClipboardService:
             log.warning("Direct type failed", tool=self._paste_tool, error=str(e))
             return False
 
-    def _simulate_paste_keystroke(self):
-        """Send Ctrl+V using the best available tool."""
+    def _simulate_paste_keystroke(self, with_shift: bool = False):
+        """Send the paste shortcut (Ctrl+V, or Ctrl+Shift+V for terminals)."""
         if IS_WAYLAND and self._paste_tool:
             try:
                 if self._paste_tool == 'wtype':
-                    subprocess.run(['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'],
-                                   check=True, timeout=5)
+                    if with_shift:
+                        subprocess.run(
+                            ['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v',
+                             '-m', 'shift', '-m', 'ctrl'],
+                            check=True, timeout=5)
+                    else:
+                        subprocess.run(['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'],
+                                       check=True, timeout=5)
                 elif self._paste_tool == 'dotool':
-                    subprocess.run(['dotool'], input=b'key ctrl+v\n',
+                    combo = 'ctrl+shift+v' if with_shift else 'ctrl+v'
+                    subprocess.run(['dotool'], input=f'key {combo}\n'.encode(),
                                    check=True, timeout=5)
                 elif self._paste_tool == 'ydotool':
-                    subprocess.run(['ydotool', 'key', '29:1', '47:1', '47:0', '29:0'],
-                                   check=True, timeout=5)
-                log.debug("Paste keystroke sent via", tool=self._paste_tool)
+                    # 29=ctrl 42=shift 47=v
+                    if with_shift:
+                        subprocess.run(['ydotool', 'key',
+                                        '29:1', '42:1', '47:1',
+                                        '47:0', '42:0', '29:0'],
+                                       check=True, timeout=5)
+                    else:
+                        subprocess.run(['ydotool', 'key',
+                                        '29:1', '47:1', '47:0', '29:0'],
+                                       check=True, timeout=5)
+                log.debug("Paste keystroke sent via",
+                          tool=self._paste_tool, with_shift=with_shift)
                 return
             except (subprocess.SubprocessError, OSError) as e:
                 log.warning("Paste tool failed, falling back to pyautogui",
                             tool=self._paste_tool, error=str(e))
 
-        # Fallback: pyautogui (works via XWayland)
-        self._get_pyautogui().hotkey('ctrl', 'v')
+        # Fallback: pyautogui (works via XWayland and on plain X11)
+        if with_shift:
+            self._get_pyautogui().hotkey('ctrl', 'shift', 'v')
+        else:
+            self._get_pyautogui().hotkey('ctrl', 'v')
 
-    def paste_at_cursor(self, text: str):
-        """Copy text to clipboard and paste at current cursor position."""
-        log.debug("Paste at cursor called", text_length=len(text))
+    def paste_at_cursor(self, text: str, with_shift: bool = False):
+        """Copy text to clipboard and paste at current cursor position.
+
+        with_shift: send Ctrl+Shift+V instead of Ctrl+V (for terminals).
+        Ignored on the Wayland direct-type path, which sends raw characters
+        and bypasses paste shortcuts entirely.
+        """
+        log.debug("Paste at cursor called", text_length=len(text),
+                  with_shift=with_shift)
 
         # Always copy to clipboard so user can re-paste manually if needed
         self.copy_to_clipboard(text)
@@ -123,14 +148,14 @@ class ClipboardService:
             if self._type_text_directly(text):
                 log.debug("Paste complete via direct type")
                 return
-            # Direct type failed — fall through to Ctrl+V
-            log.warning("Direct type failed, falling back to Ctrl+V")
+            # Direct type failed — fall through to keystroke simulation
+            log.warning("Direct type failed, falling back to paste keystroke")
 
         # Small delay to ensure clipboard is ready
         time.sleep(0.1)
 
-        log.debug("Simulating Ctrl+V")
-        self._simulate_paste_keystroke()
+        log.debug("Simulating paste keystroke", with_shift=with_shift)
+        self._simulate_paste_keystroke(with_shift=with_shift)
         log.debug("Paste command sent")
 
         time.sleep(0.1)

@@ -176,6 +176,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 from server import server, register_onboarding_complete_callback, register_data_reset_callback, register_window_actions, register_download_progress_callback, register_popup_visibility_callback
 from app_controller import get_controller
 from services.logger import setup_logging, get_logger
+from services.control_socket import ControlSocketService
 
 # Setup logging first thing
 setup_logging()
@@ -801,6 +802,26 @@ controller.initialize()
 print("[DEBUG] Controller initialized", flush=True)
 
 
+# ============================================================================
+# Linux: external control channel (Unix socket) so a compositor keybind can
+# drive start/stop/toggle via `socat` without the user needing /dev/input
+# access. See services/control_socket.py for the protocol.
+# ============================================================================
+_control_socket: ControlSocketService | None = None
+if sys.platform.startswith('linux'):
+    def _control_dispatch(verb: str) -> dict:
+        if verb == "start":
+            return controller.manual_start_recording()
+        if verb == "stop":
+            return controller.manual_stop_recording()
+        if verb == "toggle":
+            return controller.manual_toggle_recording()
+        return {}
+
+    _control_socket = ControlSocketService(_control_dispatch)
+    _control_socket.start()
+
+
 # Check if onboarding is complete
 settings = controller.get_settings()
 onboarding_complete = settings.get("onboardingComplete", False)
@@ -913,6 +934,8 @@ else:
 # against libcuda's own atexit handler. The post-app.run() call below stays
 # as a fallback for non-Qt exit paths; controller.shutdown() is idempotent.
 QApplication.instance().aboutToQuit.connect(controller.shutdown)
+if _control_socket is not None:
+    QApplication.instance().aboutToQuit.connect(_control_socket.stop)
 
 print(f"[DEBUG] About to call app.run(), onboarding_complete={onboarding_complete}", flush=True)
 app.run()
@@ -920,3 +943,5 @@ print("[DEBUG] app.run() returned", flush=True)
 
 # Cleanup on exit
 controller.shutdown()
+if _control_socket is not None:
+    _control_socket.stop()

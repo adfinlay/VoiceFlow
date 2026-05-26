@@ -140,6 +140,7 @@ class AppController:
             hold_enabled=settings.hold_hotkey_enabled,
             toggle_hotkey=settings.toggle_hotkey,
             toggle_enabled=settings.toggle_hotkey_enabled,
+            use_evdev=settings.use_evdev_hotkeys,
         )
 
         # Start hotkey listener
@@ -232,7 +233,9 @@ class AppController:
 
                     # Paste at cursor
                     info("Pasting text at cursor...")
-                    self.clipboard_service.paste_at_cursor(text)
+                    self.clipboard_service.paste_at_cursor(
+                        text, with_shift=settings.paste_with_shift,
+                    )
 
                     # Save to history (and audio if enabled)
                     history_id = self.db.add_history(text)
@@ -291,7 +294,9 @@ class AppController:
             "holdHotkeyEnabled": settings.hold_hotkey_enabled,
             "toggleHotkey": settings.toggle_hotkey,
             "toggleHotkeyEnabled": settings.toggle_hotkey_enabled,
+            "useEvdevHotkeys": settings.use_evdev_hotkeys,
             "prependSpace": settings.prepend_space,
+            "pasteWithShift": settings.paste_with_shift,
             "recordingsAutoRenameTitle": settings.recordings_auto_rename_title,
         }
 
@@ -309,6 +314,8 @@ class AppController:
             mapped["show_popup"] = kwargs["showPopup"]
         if "prependSpace" in kwargs:
             mapped["prepend_space"] = kwargs["prependSpace"]
+        if "pasteWithShift" in kwargs:
+            mapped["paste_with_shift"] = kwargs["pasteWithShift"]
         if "recordingsAutoRenameTitle" in kwargs:
             mapped["recordings_auto_rename_title"] = kwargs["recordingsAutoRenameTitle"]
         # Hotkey settings (camelCase to snake_case)
@@ -320,6 +327,8 @@ class AppController:
             mapped["toggle_hotkey"] = kwargs["toggleHotkey"]
         if "toggleHotkeyEnabled" in kwargs:
             mapped["toggle_hotkey_enabled"] = kwargs["toggleHotkeyEnabled"]
+        if "useEvdevHotkeys" in kwargs:
+            mapped["use_evdev_hotkeys"] = kwargs["useEvdevHotkeys"]
 
         for key in ["language", "model", "device", "retention", "theme", "microphone"]:
             if key in kwargs:
@@ -341,13 +350,15 @@ class AppController:
             info(f"Microphone updated to: {mic_id}")
 
         # Reconfigure hotkey service if any hotkey settings changed
-        hotkey_keys = ["hold_hotkey", "hold_hotkey_enabled", "toggle_hotkey", "toggle_hotkey_enabled"]
+        hotkey_keys = ["hold_hotkey", "hold_hotkey_enabled", "toggle_hotkey",
+                       "toggle_hotkey_enabled", "use_evdev_hotkeys"]
         if any(k in mapped for k in hotkey_keys):
             self.hotkey_service.configure(
                 hold_hotkey=settings.hold_hotkey,
                 hold_enabled=settings.hold_hotkey_enabled,
                 toggle_hotkey=settings.toggle_hotkey,
                 toggle_enabled=settings.toggle_hotkey_enabled,
+                use_evdev=settings.use_evdev_hotkeys,
             )
 
         return self.get_settings()
@@ -452,6 +463,28 @@ class AppController:
             return {"recording": False, "changed": False, "error": "onboarding_active"}
         started = self.hotkey_service.manual_start()
         return {"recording": started, "changed": started}
+
+    def manual_start_recording(self) -> dict:
+        """Start a recording session from an external trigger (control socket).
+
+        Idempotent: if a recording is already active, returns the current
+        state with changed=false instead of erroring."""
+        if self.hotkey_service.is_recording():
+            return {"recording": True, "changed": False}
+        if not self._popup_enabled:
+            warning("Manual recording ignored - popup disabled (onboarding)")
+            return {"recording": False, "changed": False, "error": "onboarding_active"}
+        started = self.hotkey_service.manual_start()
+        return {"recording": started, "changed": started}
+
+    def manual_stop_recording(self) -> dict:
+        """Stop the current recording session from an external trigger.
+
+        Idempotent: returns changed=false if nothing was recording."""
+        if not self.hotkey_service.is_recording():
+            return {"recording": False, "changed": False}
+        stopped = self.hotkey_service.manual_stop()
+        return {"recording": False, "changed": stopped}
 
     def get_recording_state(self) -> dict:
         """Return the current recording state for the UI."""

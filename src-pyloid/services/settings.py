@@ -70,8 +70,18 @@ class Settings:
     hold_hotkey_enabled: bool = True
     toggle_hotkey: str = "ctrl+shift+win"
     toggle_hotkey_enabled: bool = False
+    # Linux only: when False, the evdev-based global hotkey listener is
+    # disabled and the user must drive recording via the control socket
+    # (i3/Sway/Hyprland keybind). Lets the user drop their `input` group
+    # membership. Ignored on Windows / macOS.
+    use_evdev_hotkeys: bool = True
     # Transcription settings
     prepend_space: bool = False  # Add leading space before pasted text
+    # Paste with Ctrl+Shift+V instead of Ctrl+V. Terminals (gnome-terminal,
+    # alacritty, kitty, etc.) bind Ctrl+V to other things and accept
+    # Ctrl+Shift+V for paste. Affects only the synthetic keystroke; the
+    # Wayland "type characters directly" path is unaffected.
+    paste_with_shift: bool = False
     # Recordings (Meetings feature)
     recordings_mic_device: Optional[str] = None
     recordings_loopback_device: Optional[str] = None
@@ -111,8 +121,10 @@ class SettingsService:
             hold_hotkey_enabled=self.db.get_setting("hold_hotkey_enabled", "true") == "true",
             toggle_hotkey=self.db.get_setting("toggle_hotkey", "ctrl+shift+win"),
             toggle_hotkey_enabled=self.db.get_setting("toggle_hotkey_enabled", "false") == "true",
+            use_evdev_hotkeys=self.db.get_setting("use_evdev_hotkeys", "true") == "true",
             # Transcription settings
             prepend_space=self.db.get_setting("prepend_space", "false") == "true",
+            paste_with_shift=self.db.get_setting("paste_with_shift", "false") == "true",
             # Recordings (Meetings)
             recordings_mic_device=self.db.get_setting("recordings_mic_device", None),
             recordings_loopback_device=self.db.get_setting("recordings_loopback_device", None),
@@ -144,8 +156,10 @@ class SettingsService:
         hold_hotkey_enabled: Optional[bool] = None,
         toggle_hotkey: Optional[str] = None,
         toggle_hotkey_enabled: Optional[bool] = None,
+        use_evdev_hotkeys: Optional[bool] = None,
         show_popup: Optional[bool] = None,
         prepend_space: Optional[bool] = None,
+        paste_with_shift: Optional[bool] = None,
         # Recordings
         recordings_mic_device: Optional[str] = None,
         recordings_loopback_device: Optional[str] = None,
@@ -180,6 +194,8 @@ class SettingsService:
             self.db.set_setting("show_popup", "true" if show_popup else "false")
         if prepend_space is not None:
             self.db.set_setting("prepend_space", "true" if prepend_space else "false")
+        if paste_with_shift is not None:
+            self.db.set_setting("paste_with_shift", "true" if paste_with_shift else "false")
         # Hotkey settings - normalize before storing for consistent format
         if hold_hotkey is not None:
             self.db.set_setting("hold_hotkey", normalize_hotkey(hold_hotkey))
@@ -189,6 +205,8 @@ class SettingsService:
             self.db.set_setting("toggle_hotkey", normalize_hotkey(toggle_hotkey))
         if toggle_hotkey_enabled is not None:
             self.db.set_setting("toggle_hotkey_enabled", "true" if toggle_hotkey_enabled else "false")
+        if use_evdev_hotkeys is not None:
+            self.db.set_setting("use_evdev_hotkeys", "true" if use_evdev_hotkeys else "false")
         # Recordings (Meetings)
         if recordings_mic_device is not None:
             self.db.set_setting("recordings_mic_device", recordings_mic_device)

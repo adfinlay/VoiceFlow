@@ -15,8 +15,16 @@ export interface Settings {
   holdHotkeyEnabled: boolean;
   toggleHotkey: string;
   toggleHotkeyEnabled: boolean;
+  // Linux only: when false, the built-in evdev hotkey listener is disabled
+  // and recording must be driven via the control socket (i3/Sway/Hyprland
+  // keybind invoking `socat`). Lets users drop their `input` group
+  // membership. Ignored by the backend on Windows / macOS.
+  useEvdevHotkeys: boolean;
   // Transcription settings
   prependSpace: boolean;
+  // Paste with Ctrl+Shift+V instead of Ctrl+V. For terminals that bind
+  // Ctrl+V to other things (gnome-terminal, alacritty, kitty, etc.).
+  pasteWithShift: boolean;
   // Recordings (Meetings) — backend-persisted toggles for the long-form flow.
   recordingsAutoRenameTitle?: boolean;
 }

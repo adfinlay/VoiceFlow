@@ -1,0 +1,29 @@
+# VoiceFlow user-level systemd service
+#
+# Auto-start VoiceFlow at login so its control socket is always available
+# for compositor keybinds. Copy this file to
+# ~/.config/systemd/user/voiceflow.service, edit ExecStart to point at your
+# installed binary, then:
+#
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now voiceflow.service
+#
+# Once running, VoiceFlow listens on $XDG_RUNTIME_DIR/voiceflow/control.sock.
+# See docs/linux-control-socket.md for compositor binding recipes.
+
+[Unit]
+Description=VoiceFlow voice-to-text daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# AppImage install — adjust filename to match the release you downloaded.
+ExecStart=%h/Applications/VoiceFlow-x86_64.AppImage
+# Tarball install — uncomment instead of the AppImage line above.
+# ExecStart=%h/.local/share/VoiceFlow/VoiceFlow
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
