@@ -34,7 +34,7 @@ jobs:
             libgl1-mesa-dev libegl1-mesa-dev libxkbcommon0 libfontconfig1 \
             libdbus-1-3 libxcb-xinerama0 libxcb-cursor0 libxcb-shape0 \
             libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0 libxcb-image0 \
-            libnss3 libasound2 libfuse2 execstack
+            libnss3 libasound2 libfuse2 patchelf
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -101,8 +101,12 @@ jobs:
       - name: Clear executable stack flags
         run: |
           # python-build-standalone builds ship libpython with GNU_STACK RWE,
-          # which Linux 6.8+ kernels reject. Clear the flag on all bundled .so files.
-          find ./dist/VoiceFlow -type f -name '*.so*' -exec execstack -c {} +
+          # which glibc 2.41+ / Linux 6.8+ reject at dlopen. Clear the marker
+          # on all bundled .so files. Was previously `execstack -c`, but the
+          # `execstack` package was dropped from Debian 13+ — `patchelf` does
+          # the same job and is available on every modern distro. Local builds
+          # in installer/build-linux.sh use the same tool; keep them in sync.
+          find ./dist/VoiceFlow -type f -name '*.so*' -exec patchelf --clear-execstack {} +
           echo "Verifying no executable stacks remain..."
           BAD=$(find ./dist/VoiceFlow -type f -name '*.so*' -exec sh -c \
             'readelf -l "$1" 2>/dev/null | grep -A1 GNU_STACK | grep -q RWE && echo "$1"' _ {} \;)
