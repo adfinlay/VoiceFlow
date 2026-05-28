@@ -211,52 +211,94 @@ def init_signals():
 # ============================================================================
 # Single Instance Check (Issue #4: Multiple tray icons)
 # ============================================================================
-# Windows mutex-based single instance check as backup to Pyloid's single_instance
-# This prevents multiple tray icons when Pyloid's check fails or app crashes
+# Pyloid's built-in single_instance=True is the primary defense, but it has
+# been observed to fail when launching via nohup or detached AppImages, so
+# we layer our own check on top: Windows named mutex, Linux fcntl flock.
+# Both held for process lifetime; the kernel releases them on exit (even
+# SIGKILL), so unclean shutdowns don't strand the lock.
 _instance_mutex = None
+_instance_lock_fd = None
 
 def ensure_single_instance():
-    """Ensure only one instance of VoiceFlow runs at a time using Windows mutex."""
-    global _instance_mutex
+    """Ensure only one instance of VoiceFlow runs at a time."""
+    global _instance_mutex, _instance_lock_fd
 
-    if sys.platform != 'win32':
-        return True  # Only implement Windows mutex for now
+    if sys.platform == 'win32':
+        try:
+            import ctypes
 
-    try:
-        import ctypes
-        from ctypes import wintypes
+            # Windows API constants
+            ERROR_ALREADY_EXISTS = 183
 
-        # Windows API constants
-        ERROR_ALREADY_EXISTS = 183
+            # Create a named mutex
+            kernel32 = ctypes.windll.kernel32
+            mutex_name = "VoiceFlow_SingleInstance_Mutex"
 
-        # Create a named mutex
-        kernel32 = ctypes.windll.kernel32
-        mutex_name = "VoiceFlow_SingleInstance_Mutex"
+            _instance_mutex = kernel32.CreateMutexW(None, False, mutex_name)
 
-        _instance_mutex = kernel32.CreateMutexW(None, False, mutex_name)
+            if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+                log.warning("Another instance of VoiceFlow is already running")
+                # Try to focus the existing instance by finding its window
+                try:
+                    user32 = ctypes.windll.user32
+                    hwnd = user32.FindWindowW(None, "VoiceFlow")
+                    if hwnd:
+                        # Show and bring to foreground
+                        SW_RESTORE = 9
+                        user32.ShowWindow(hwnd, SW_RESTORE)
+                        user32.SetForegroundWindow(hwnd)
+                        log.info("Focused existing VoiceFlow window")
+                except Exception as e:
+                    log.warning("Could not focus existing window", error=str(e))
+                return False
 
-        if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
-            log.warning("Another instance of VoiceFlow is already running")
-            # Try to focus the existing instance by finding its window
+            log.info("Single instance check passed - mutex acquired")
+            return True
+
+        except Exception as e:
+            log.error("Single instance check failed", error=str(e))
+            return True  # Allow running if check fails
+
+    if sys.platform.startswith('linux'):
+        # fcntl advisory lock on $XDG_RUNTIME_DIR/voiceflow/instance.lock.
+        # Held as long as the fd stays open; released automatically when the
+        # process exits (kernel-managed, survives SIGKILL / unclean shutdown).
+        try:
+            import fcntl
+            runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/tmp/voiceflow-{os.getuid()}"
+            lock_dir = os.path.join(runtime, "voiceflow")
+            os.makedirs(lock_dir, mode=0o700, exist_ok=True)
+            lock_path = os.path.join(lock_dir, "instance.lock")
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
             try:
-                user32 = ctypes.windll.user32
-                hwnd = user32.FindWindowW(None, "VoiceFlow")
-                if hwnd:
-                    # Show and bring to foreground
-                    SW_RESTORE = 9
-                    user32.ShowWindow(hwnd, SW_RESTORE)
-                    user32.SetForegroundWindow(hwnd)
-                    log.info("Focused existing VoiceFlow window")
-            except Exception as e:
-                log.warning("Could not focus existing window", error=str(e))
-            return False
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                # Another instance owns the lock — read its recorded PID for the log.
+                try:
+                    with open(lock_path, 'r') as f:
+                        other_pid = f.read().strip()
+                except OSError:
+                    other_pid = "unknown"
+                log.warning("Another instance of VoiceFlow is already running",
+                            pid=other_pid)
+                os.close(fd)
+                return False
+            # Record our PID for the next launch's diagnostic message.
+            try:
+                os.ftruncate(fd, 0)
+                os.write(fd, f"{os.getpid()}\n".encode())
+            except OSError as exc:
+                log.debug("Failed to write PID to instance lock", error=str(exc))
+            # Keep the fd alive for the process lifetime.
+            _instance_lock_fd = fd
+            log.info("Single instance check passed - flock acquired",
+                     path=lock_path)
+            return True
+        except Exception as e:
+            log.error("Single instance check failed", error=str(e))
+            return True  # Allow running if check fails
 
-        log.info("Single instance check passed - mutex acquired")
-        return True
-
-    except Exception as e:
-        log.error("Single instance check failed", error=str(e))
-        return True  # Allow running if check fails
+    return True  # macOS / other platforms: rely on Pyloid's built-in check
 
 
 # Check for existing instance before proceeding

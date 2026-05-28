@@ -11,6 +11,7 @@ IS_WAYLAND = IS_LINUX and bool(
     __import__('os').environ.get('WAYLAND_DISPLAY')
     or __import__('os').environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
 )
+IS_X11 = IS_LINUX and not IS_WAYLAND
 
 
 def _find_tool(*names: str) -> str | None:
@@ -23,6 +24,11 @@ def _find_tool(*names: str) -> str | None:
 
 class ClipboardService:
     def __init__(self):
+        # Pick the platform-native input tool so we never need to fight
+        # pyautogui/python-xlib version skew. On Wayland we prefer wtype
+        # (most reliable on KWin/Hyprland/Sway), then dotool, then ydotool.
+        # On plain X11 we use xdotool. PyAutoGUI is kept as a last-ditch
+        # fallback (Windows/macOS, or Linux without any of the above).
         if IS_WAYLAND:
             self._paste_tool = _find_tool('wtype', 'dotool', 'ydotool')
             if self._paste_tool:
@@ -30,6 +36,15 @@ class ClipboardService:
             else:
                 log.warning("No Wayland paste tool found (wtype/dotool/ydotool). "
                             "Falling back to pyautogui via XWayland.")
+        elif IS_X11:
+            self._paste_tool = _find_tool('xdotool')
+            if self._paste_tool:
+                log.info("X11 paste tool found", tool=self._paste_tool)
+            else:
+                log.warning("xdotool not installed. Falling back to pyautogui "
+                            "(may fail on systems where bundled python-xlib "
+                            "lacks newer X11 auth constants — install xdotool: "
+                            "`sudo apt install xdotool`).")
         else:
             self._paste_tool = None
 
@@ -68,7 +83,11 @@ class ClipboardService:
             pyperclip.copy(text)
 
     def _type_text_directly(self, text: str) -> bool:
-        """Type text directly using Wayland input tool. Returns True on success."""
+        """Type text directly using the selected input tool.
+
+        Bypasses paste shortcuts entirely (works in any terminal/app
+        regardless of Ctrl+V vs Ctrl+Shift+V binding). Returns True on
+        success."""
         try:
             if self._paste_tool == 'wtype':
                 subprocess.run(['wtype', '--', text], check=True, timeout=10)
@@ -78,6 +97,13 @@ class ClipboardService:
                                check=True, timeout=10)
             elif self._paste_tool == 'ydotool':
                 subprocess.run(['ydotool', 'type', '--', text],
+                               check=True, timeout=10)
+            elif self._paste_tool == 'xdotool':
+                # --clearmodifiers ensures any held modifiers (e.g. the
+                # $mod from the i3 push-to-talk binding still being held
+                # for the release event) don't bleed into the typed text.
+                subprocess.run(['xdotool', 'type', '--clearmodifiers',
+                                '--delay', '1', '--', text],
                                check=True, timeout=10)
             else:
                 return False
@@ -89,7 +115,7 @@ class ClipboardService:
 
     def _simulate_paste_keystroke(self, with_shift: bool = False):
         """Send the paste shortcut (Ctrl+V, or Ctrl+Shift+V for terminals)."""
-        if IS_WAYLAND and self._paste_tool:
+        if self._paste_tool:
             try:
                 if self._paste_tool == 'wtype':
                     if with_shift:
@@ -115,6 +141,10 @@ class ClipboardService:
                         subprocess.run(['ydotool', 'key',
                                         '29:1', '47:1', '47:0', '29:0'],
                                        check=True, timeout=5)
+                elif self._paste_tool == 'xdotool':
+                    combo = 'ctrl+shift+v' if with_shift else 'ctrl+v'
+                    subprocess.run(['xdotool', 'key', '--clearmodifiers', combo],
+                                   check=True, timeout=5)
                 log.debug("Paste keystroke sent via",
                           tool=self._paste_tool, with_shift=with_shift)
                 return
@@ -122,7 +152,9 @@ class ClipboardService:
                 log.warning("Paste tool failed, falling back to pyautogui",
                             tool=self._paste_tool, error=str(e))
 
-        # Fallback: pyautogui (works via XWayland and on plain X11)
+        # Fallback: pyautogui (Windows, macOS, or Linux without a paste tool).
+        # Known to fail on Linux when bundled python-xlib lacks newer X11 auth
+        # constants — install xdotool to avoid this code path.
         if with_shift:
             self._get_pyautogui().hotkey('ctrl', 'shift', 'v')
         else:
@@ -142,9 +174,10 @@ class ClipboardService:
         self.copy_to_clipboard(text)
         log.debug("Text copied to clipboard")
 
-        # On Wayland, type text directly — works in terminals (Ctrl+V doesn't)
-        # and all other apps, regardless of their paste shortcut.
-        if IS_WAYLAND and self._paste_tool:
+        # On Linux (Wayland or X11), type text directly — works in terminals
+        # (Ctrl+V doesn't) and all other apps, regardless of their paste
+        # shortcut. Bypasses the with_shift question entirely on Linux.
+        if IS_LINUX and self._paste_tool:
             if self._type_text_directly(text):
                 log.debug("Paste complete via direct type")
                 return
