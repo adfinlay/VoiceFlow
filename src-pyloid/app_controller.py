@@ -1,4 +1,5 @@
 from typing import Optional, Callable, TypedDict
+import collections
 import threading
 import time
 import os
@@ -25,6 +26,35 @@ class AudioAttachmentMeta(TypedDict):
     audio_duration_ms: int
     audio_size_bytes: int
     audio_mime: str
+
+
+# Status line rendering — see set_broadcast_callback() / _format_status_line().
+# Five bars matches the popup's amplitude visualizer width. Block characters
+# step from a thin baseline (▁) up to a full block (█); zero amplitude still
+# shows a baseline so the bar reads as a contiguous waveform rather than a
+# blinking row of gaps. Pulse uses two glyphs swapped on a 1 s wall-clock
+# cycle, the same cadence as the popup's CSS keyframe animation.
+_AMP_BARS = 5
+_BLOCK_CHARS = "▁▂▃▄▅▆▇█"
+_PULSE_GLYPHS = ("●", "○")
+_PULSE_PERIOD_SECS = 1.0
+_EMIT_INTERVAL_SECS = 0.08  # ~12.5 Hz
+
+
+def _amp_to_block(amp: float) -> str:
+    """Map an amplitude (0..1) to a single Unicode block character."""
+    if amp <= 0.0:
+        return _BLOCK_CHARS[0]
+    if amp >= 1.0:
+        return _BLOCK_CHARS[-1]
+    idx = int(amp * (len(_BLOCK_CHARS) - 1) + 0.5)
+    return _BLOCK_CHARS[idx]
+
+
+def _pulse_glyph(now: float) -> str:
+    """Pick the dot glyph for the current wall-clock phase of the pulse."""
+    phase = (now % _PULSE_PERIOD_SECS) / _PULSE_PERIOD_SECS
+    return _PULSE_GLYPHS[0] if phase < 0.5 else _PULSE_GLYPHS[1]
 
 
 class AppController:
@@ -71,6 +101,17 @@ class AppController:
         self._on_amplitude: Optional[Callable[[float], None]] = None
         self._on_error: Optional[Callable[[str], None]] = None
 
+        # Status broadcast (polybar / external status-bar subscribers).
+        # The callback receives a single display line per emit. A daemon
+        # thread ticks the emit while state is non-idle so the pulsing
+        # dot and amplitude bars animate independently of audio activity.
+        self._broadcast_callback: Optional[Callable[[str], None]] = None
+        self._state: str = "idle"
+        self._amplitude_ring = collections.deque([0.0] * _AMP_BARS,
+                                                 maxlen=_AMP_BARS)
+        self._emit_thread: Optional[threading.Thread] = None
+        self._emit_stop = threading.Event()
+
         # Setup hotkey callbacks
         self.hotkey_service.set_callbacks(
             on_activate=self._handle_hotkey_activate,
@@ -98,6 +139,89 @@ class AppController:
         """Called from main.py once the popup-event signal pathway is ready.
         Routes meeting transcribe/summarize/recording-state events to the frontend."""
         self._meetings_event_emitter = emitter
+
+    def set_broadcast_callback(self, callback: Callable[[str], None]) -> None:
+        """Wire a status-line broadcaster (control_socket.broadcast).
+
+        The callback is invoked with a single display line on every state
+        change and on each tick of the emit timer while state is non-idle.
+        Lines are designed for polybar `tail = true` modules — see
+        docs/linux-control-socket.md. Calling this also emits the current
+        state so a snapshot is available for late subscribers.
+        """
+        self._broadcast_callback = callback
+        self._emit_state()
+
+    # --- status broadcast ---
+
+    def _set_state(self, state: str) -> None:
+        """Move the status machine. Starts/stops the emit timer so the
+        pulsing dot only ticks while we're actively recording or
+        transcribing."""
+        if state == self._state:
+            return
+        self._state = state
+        if state == "recording":
+            # Clear the ring so the previous take's amplitude doesn't bleed
+            # into the new one's first frame.
+            for _ in range(len(self._amplitude_ring)):
+                self._amplitude_ring.append(0.0)
+        self._emit_state()
+        if state == "idle":
+            self._stop_emit_timer()
+        else:
+            self._start_emit_timer()
+
+    def _emit_state(self) -> None:
+        cb = self._broadcast_callback
+        if cb is None:
+            return
+        try:
+            cb(self._format_status_line())
+        except Exception as exc:  # noqa: BLE001
+            exception(f"Status broadcast failed: {exc}")
+
+    def _format_status_line(self) -> str:
+        """Render the current state as a polybar-friendly display line.
+
+        Idle is a single em dash, matching the popup's resting pill.
+        Recording shows pulsing dot + model + amplitude bars.
+        Transcribing keeps the pulse and model but trades the bar for an
+        ellipsis since there's no live audio to visualise."""
+        if self._state == "idle":
+            return "—"
+        try:
+            model = self.settings_service.get_settings().model
+        except Exception:  # noqa: BLE001
+            model = ""
+        dot = _pulse_glyph(time.monotonic())
+        if self._state == "recording":
+            bars = "".join(_amp_to_block(a) for a in self._amplitude_ring)
+            return f"{dot} {model} {bars}" if model else f"{dot} {bars}"
+        if self._state == "transcribing":
+            return f"{dot} {model} …" if model else f"{dot} …"
+        return "—"
+
+    def _start_emit_timer(self) -> None:
+        if self._emit_thread is not None and self._emit_thread.is_alive():
+            return
+        self._emit_stop.clear()
+        self._emit_thread = threading.Thread(
+            target=self._emit_loop, daemon=True, name="status-emit")
+        self._emit_thread.start()
+
+    def _stop_emit_timer(self) -> None:
+        self._emit_stop.set()
+        # Don't join — _emit_loop sleeps at most _EMIT_INTERVAL_SECS and
+        # exits on the next wake. Joining from a state-change path that
+        # itself might be on the audio callback thread risks deadlocking.
+        self._emit_thread = None
+
+    def _emit_loop(self) -> None:
+        # Steady tick so the dot can pulse and amplitude bars can move even
+        # during silence. Wait()-based sleep so stop is immediate.
+        while not self._emit_stop.wait(_EMIT_INTERVAL_SECS):
+            self._emit_state()
 
     def initialize(self):
         """Initialize the app - load model and start hotkey listener."""
@@ -155,6 +279,7 @@ class AppController:
         if self._shutdown_done:
             return
         self._shutdown_done = True
+        self._stop_emit_timer()
         self.hotkey_service.stop()
         # Stop any active meeting recording before tearing down. parec /
         # sounddevice hold PipeWire / PortAudio handles that, if leaked, can
@@ -180,6 +305,7 @@ class AppController:
         if self._on_recording_start:
             self._on_recording_start()
         self.audio_service.start_recording()
+        self._set_state("recording")
 
     def _handle_hotkey_deactivate(self):
         """Called when hotkey is released."""
@@ -191,9 +317,11 @@ class AppController:
 
         if len(audio) == 0:
             warning("No audio recorded")
+            self._set_state("idle")
             return
 
         info(f"Recorded {len(audio)} samples")
+        self._set_state("transcribing")
 
         # Transcribe in background
         def transcribe():
@@ -268,13 +396,25 @@ class AppController:
                 # Still notify completion to reset UI state
                 if self._on_transcription_complete:
                     self._on_transcription_complete("")
+            finally:
+                # Always release the status line back to idle so polybar
+                # subscribers don't get stuck on "transcribing …".
+                self._set_state("idle")
 
         threading.Thread(target=transcribe, daemon=True).start()
 
     def _handle_amplitude(self, amplitude: float):
-        """Forward amplitude to UI."""
+        """Forward amplitude to UI and update the status-line ring buffer.
+
+        The emit timer reads the ring on its own tick, so we don't broadcast
+        from inside the audio callback — sounddevice's PortAudio thread
+        shouldn't get stuck waiting on a socket write."""
         if self._on_amplitude:
             self._on_amplitude(amplitude)
+        # Append unconditionally — deque.append is atomic enough for this
+        # use, and a stale frame from after stop_recording() is harmless
+        # because the state machine has already left "recording".
+        self._amplitude_ring.append(amplitude)
 
     # Settings methods for RPC
     def get_settings(self) -> dict:

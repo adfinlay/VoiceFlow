@@ -59,6 +59,12 @@ bindr = SUPER, R, exec, sh -c 'echo stop  | socat -u - UNIX:$XDG_RUNTIME_DIR/voi
 
 ## Protocol
 
+The socket carries two patterns: one-shot commands and a subscription
+stream. Both go through the same socket — the verb on the first line
+decides which.
+
+### One-shot commands
+
 One request per connection, one line in, one JSON line out.
 
 Recognised verbs: `start`, `stop`, `toggle`.
@@ -82,10 +88,92 @@ Response — always JSON:
 On error:
 
 ```json
-{"ok":false,"error":"unknown_command","detail":"got 'spam', expected ['start','stop','toggle']"}
+{"ok":false,"error":"unknown_command","detail":"got 'spam', expected ['start','stop','subscribe','toggle']"}
 ```
 
 For interactive debugging, drop `socat`'s `-u` flag to see the response.
+
+### Subscription stream
+
+Send `subscribe\n` (or `{"cmd":"subscribe"}\n`) and keep the connection
+open. VoiceFlow pushes one **plain-text line per state update** —
+no JSON envelope — designed for `polybar tail` modules. The most recent
+line is replayed on connect so a status bar starting after VoiceFlow
+sees the current state immediately.
+
+Lines look like:
+
+| State          | Example                  |
+| -------------- | ------------------------ |
+| Idle           | `—`                      |
+| Recording      | `● turbo ▁▂▃▄▅`          |
+| Transcribing   | `● turbo …`              |
+
+The dot pulses on a 1 s wall-clock cycle (`●` half the cycle, `○` the
+other half), so the indicator visibly animates even during silence. The
+amplitude bars are a rolling 5-sample window updated at ~12.5 Hz.
+
+## polybar integration
+
+Add a `custom/script` module with `tail = true` and a wrapper that
+subscribes to the socket. Drop this in `~/.config/polybar/voiceflow.sh`:
+
+```sh
+#!/bin/sh
+# Tail VoiceFlow status for a polybar `tail = true` module.
+SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/voiceflow/control.sock"
+while true; do
+    printf -- '—\n'    # disconnected placeholder
+    if [ -S "$SOCK" ]; then
+        python3 -u -c '
+import os, socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+try:
+    s.connect(os.environ["SOCK"])
+    s.sendall(b"subscribe\n")
+    while True:
+        chunk = s.recv(4096)
+        if not chunk:
+            break
+        sys.stdout.write(chunk.decode("utf-8", errors="replace"))
+        sys.stdout.flush()
+except OSError:
+    pass
+' 2>/dev/null
+    fi
+    sleep 1
+done
+```
+
+```bash
+chmod +x ~/.config/polybar/voiceflow.sh
+```
+
+Then in your polybar config:
+
+```ini
+[module/voiceflow]
+type = custom/script
+exec = ~/.config/polybar/voiceflow.sh
+tail = true
+format-padding = 1
+```
+
+Place it in `modules-center = voiceflow` (or wherever you want it).
+The script:
+
+* Prints `—` whenever VoiceFlow is down so the slot doesn't go blank.
+* Reconnects every second after disconnect (VoiceFlow restart, suspend, etc.).
+* Uses only `python3` and standard libraries — already installed on any
+  system that can run polybar.
+
+If you'd rather not depend on Python, `socat` can do it with a hack to
+keep stdin open after sending `subscribe`:
+
+```sh
+(printf 'subscribe\n'; exec sleep infinity) \
+    | socat -t inf - "UNIX-CONNECT:$SOCK"
+```
 
 ## systemd user unit
 

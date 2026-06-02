@@ -5,19 +5,25 @@ VoiceFlow to start, stop, or toggle recording without going through the
 in-process global hotkey listener. Lets the user drop their `input` group
 membership and bind whatever key combo their compositor allows.
 
-Protocol: one request per connection, one line in, one JSON line out.
+Two patterns share the same socket:
 
-Request is either a bare verb (`toggle\n`) or a JSON object
-(`{"cmd":"toggle"}\n`). Recognised verbs: `start`, `stop`, `toggle`.
+1. One-shot commands. Client sends a single line and receives a JSON reply.
+   Request: bare verb (`toggle\n`) or JSON (`{"cmd":"toggle"}\n`).
+   Verbs: `start`, `stop`, `toggle`.
+   Reply:  `{"ok":true,"verb":"toggle","recording":true}` or
+           `{"ok":false,"error":"unknown_command"}`.
 
-Response is always JSON, e.g. `{"ok":true,"verb":"toggle","recording":true}`
-or `{"ok":false,"error":"unknown_command"}`.
+2. Subscription. Client sends `subscribe\n` (or `{"cmd":"subscribe"}\n`) and
+   the server keeps the connection open, pushing UTF-8 text lines whenever
+   VoiceFlow's recording state changes. No JSON ack is sent — the wire is
+   pure display text so a `polybar tail` module can stream it verbatim. The
+   most recent line is replayed to new subscribers so a status bar starting
+   mid-session sees the correct state immediately.
 
-The accept loop runs in a daemon thread and calls the dispatch callable
-synchronously per-connection. The dispatch is expected to be tolerant of
-background-thread invocation; for VoiceFlow that's true today because the
-Linux evdev hotkey already drives `AppController.manual_*` methods from a
-background thread.
+Each connection runs in its own daemon thread so a long-lived subscriber
+doesn't block the accept loop or one-shot dispatches. The dispatch callable
+must tolerate background-thread invocation (true for VoiceFlow today; the
+Linux evdev hotkey already drives `AppController.manual_*` from a worker).
 """
 from __future__ import annotations
 
@@ -32,7 +38,7 @@ from services.logger import get_logger
 
 log = get_logger("ipc")
 
-VERBS = {"start", "stop", "toggle"}
+VERBS = {"start", "stop", "toggle", "subscribe"}
 _MAX_REQUEST_BYTES = 4096
 _CLIENT_TIMEOUT_SECS = 2.0
 _ACCEPT_POLL_SECS = 0.5
@@ -47,10 +53,42 @@ class ControlSocketService:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._path: Optional[Path] = None
+        # Subscribers receive a UTF-8 text line every time broadcast() is
+        # called. The lock guards the set against concurrent broadcasts,
+        # subscribes, and disconnect cleanup; it also serialises socket
+        # writes so two broadcasts can't interleave bytes on one client.
+        self._subscribers: set[socket.socket] = set()
+        self._sub_lock = threading.Lock()
+        # Snapshot of the most recent broadcast line, replayed to new
+        # subscribers so polybar starting after VoiceFlow sees current
+        # state immediately rather than blank until the next transition.
+        self._last_line: Optional[bytes] = None
 
     @property
     def path(self) -> Optional[Path]:
         return self._path
+
+    def broadcast(self, line: str) -> None:
+        """Push a UTF-8 text line to every subscriber and remember it as
+        the replay snapshot for future subscribers. Safe to call from any
+        thread; no-op when there are no subscribers."""
+        encoded = (line + "\n").encode("utf-8")
+        with self._sub_lock:
+            self._last_line = encoded
+            if not self._subscribers:
+                return
+            dead = []
+            for sub in self._subscribers:
+                try:
+                    sub.sendall(encoded)
+                except (BrokenPipeError, OSError):
+                    dead.append(sub)
+            for d in dead:
+                self._subscribers.discard(d)
+                try:
+                    d.close()
+                except OSError:
+                    pass
 
     def start(self, path: Optional[Path] = None) -> Optional[Path]:
         """Bind the socket and start the accept loop. Returns the bound path,
@@ -124,6 +162,14 @@ class ControlSocketService:
         self._thread = None
         if thread is not None:
             thread.join(timeout=2)
+        # Close out any active subscribers so their threads exit cleanly.
+        with self._sub_lock:
+            for sub in list(self._subscribers):
+                try:
+                    sub.close()
+                except OSError:
+                    pass
+            self._subscribers.clear()
         if self._path is not None:
             try:
                 if self._path.exists():
@@ -149,15 +195,28 @@ class ControlSocketService:
                 if not self._stop.is_set():
                     log.exception("Accept loop terminated unexpectedly")
                 return
+            # One thread per connection. One-shot dispatches return
+            # quickly; subscribers block until the client disconnects.
+            # Either way the accept loop stays responsive to new work.
+            threading.Thread(
+                target=self._handle_connection_thread,
+                args=(conn,),
+                daemon=True,
+                name="control-conn",
+            ).start()
+
+    def _handle_connection_thread(self, conn: socket.socket) -> None:
+        try:
+            self._handle_connection(conn)
+        except Exception:  # noqa: BLE001
+            log.exception("Unhandled error in control connection handler")
+        finally:
+            with self._sub_lock:
+                self._subscribers.discard(conn)
             try:
-                self._handle_connection(conn)
-            except Exception:  # noqa: BLE001
-                log.exception("Unhandled error in control connection handler")
-            finally:
-                try:
-                    conn.close()
-                except OSError:
-                    pass
+                conn.close()
+            except OSError:
+                pass
 
     def _handle_connection(self, conn: socket.socket) -> None:
         conn.settimeout(_CLIENT_TIMEOUT_SECS)
@@ -189,6 +248,10 @@ class ControlSocketService:
                         detail=f"got {verb!r}, expected one of {sorted(VERBS)}")
             return
 
+        if verb == "subscribe":
+            self._handle_subscribe(conn)
+            return
+
         try:
             result = self._dispatch(verb) or {}
         except Exception as exc:  # noqa: BLE001
@@ -203,6 +266,33 @@ class ControlSocketService:
             log.debug("Dispatched control command", verb=verb, **result)
 
         _send(conn, {"ok": True, "verb": verb, **result})
+
+    def _handle_subscribe(self, conn: socket.socket) -> None:
+        """Add the connection to the subscriber set and block until it
+        disconnects. The wire is plain text (no JSON ack) so polybar's
+        `tail = true` module can stream it verbatim."""
+        with self._sub_lock:
+            last = self._last_line
+            self._subscribers.add(conn)
+        log.debug("Status subscriber attached", count=len(self._subscribers))
+        # Replay the latest broadcast so the new subscriber sees current
+        # state without having to wait for the next transition.
+        if last is not None:
+            try:
+                conn.sendall(last)
+            except (BrokenPipeError, OSError):
+                return
+        # Block until the client closes. We don't expect more data on this
+        # socket — subscribers are passive readers — so anything they send
+        # is discarded. recv returns b'' on clean close, raises on error.
+        conn.settimeout(None)
+        try:
+            while True:
+                chunk = conn.recv(64)
+                if not chunk:
+                    return
+        except OSError:
+            return
 
 
 def default_socket_path() -> Path:

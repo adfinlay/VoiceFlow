@@ -21,6 +21,10 @@ def controller(temp_db):
     from services.hotkey import HotkeyService
     from services.clipboard import ClipboardService
 
+    import collections
+    import threading
+    from app_controller import _AMP_BARS
+
     ctrl = AppController.__new__(AppController)
     ctrl.db = DatabaseService(temp_db)
     ctrl.settings_service = SettingsService(ctrl.db)
@@ -34,6 +38,13 @@ def controller(temp_db):
     ctrl._on_amplitude = None
     ctrl._on_error = None
     ctrl._shutdown_done = False
+    # Status-broadcast state — only used in Linux runs but the attributes
+    # must exist so shutdown() / _set_state() can run unconditionally.
+    ctrl._broadcast_callback = None
+    ctrl._state = "idle"
+    ctrl._amplitude_ring = collections.deque([0.0] * _AMP_BARS, maxlen=_AMP_BARS)
+    ctrl._emit_thread = None
+    ctrl._emit_stop = threading.Event()
 
     yield ctrl
 

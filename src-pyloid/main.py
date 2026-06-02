@@ -862,6 +862,12 @@ if sys.platform.startswith('linux'):
 
     _control_socket = ControlSocketService(_control_dispatch)
     _control_socket.start()
+    # Route the controller's status-line emits through the socket's
+    # broadcaster so any `subscribe`-d client (typically a polybar
+    # tail-module wrapper) sees idle / recording / transcribing
+    # transitions plus a pulsing dot and amplitude bars. See
+    # docs/linux-control-socket.md for the polybar setup.
+    controller.set_broadcast_callback(_control_socket.broadcast)
 
 
 # Check if onboarding is complete
