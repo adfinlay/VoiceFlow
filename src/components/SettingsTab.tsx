@@ -16,6 +16,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -361,6 +362,19 @@ export function SettingsTab() {
               error={deviceError}
               options={options.deviceOptions}
               onChange={handleDeviceChange}
+            />
+          </SectionBlock>
+
+          <SectionBlock
+            label="Custom vocabulary"
+            helper="Comma-separated proper nouns or jargon Whisper should prefer. Useful for client names, project codenames, and acronyms that the model otherwise mishears. Keep it short — long prompts start to skew general decoding."
+          >
+            <Textarea
+              value={settings.customVocabulary ?? ""}
+              onChange={(e) => updateSetting("customVocabulary", e.target.value)}
+              placeholder="Puttshack, Aegis, kp.kdbx"
+              rows={2}
+              className="font-mono text-sm"
             />
           </SectionBlock>
         </Section>

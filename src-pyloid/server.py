@@ -71,6 +71,7 @@ async def update_settings(
     useEvdevHotkeys: Optional[bool] = None,
     prependSpace: Optional[bool] = None,
     pasteWithShift: Optional[bool] = None,
+    customVocabulary: Optional[str] = None,
     recordingsAutoRenameTitle: Optional[bool] = None,
 ):
     controller = get_controller()
@@ -110,6 +111,8 @@ async def update_settings(
         kwargs["prependSpace"] = prependSpace
     if pasteWithShift is not None:
         kwargs["pasteWithShift"] = pasteWithShift
+    if customVocabulary is not None:
+        kwargs["customVocabulary"] = customVocabulary
     if recordingsAutoRenameTitle is not None:
         kwargs["recordingsAutoRenameTitle"] = recordingsAutoRenameTitle
 

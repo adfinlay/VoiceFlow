@@ -82,6 +82,12 @@ class Settings:
     # Ctrl+Shift+V for paste. Affects only the synthetic keystroke; the
     # Wayland "type characters directly" path is unaffected.
     paste_with_shift: bool = False
+    # Comma-separated list (or short paragraph) of proper nouns / jargon
+    # that Whisper should prefer when decoding. Passed to faster-whisper's
+    # `hotwords` parameter, which boosts the relevant tokens at decode
+    # time. Empty disables the bias. Keep short — long prompts start to
+    # influence general decoding (punctuation, invented words).
+    custom_vocabulary: str = ""
     # Recordings (Meetings feature)
     recordings_mic_device: Optional[str] = None
     recordings_loopback_device: Optional[str] = None
@@ -125,6 +131,7 @@ class SettingsService:
             # Transcription settings
             prepend_space=self.db.get_setting("prepend_space", "false") == "true",
             paste_with_shift=self.db.get_setting("paste_with_shift", "false") == "true",
+            custom_vocabulary=self.db.get_setting("custom_vocabulary", ""),
             # Recordings (Meetings)
             recordings_mic_device=self.db.get_setting("recordings_mic_device", None),
             recordings_loopback_device=self.db.get_setting("recordings_loopback_device", None),
@@ -160,6 +167,7 @@ class SettingsService:
         show_popup: Optional[bool] = None,
         prepend_space: Optional[bool] = None,
         paste_with_shift: Optional[bool] = None,
+        custom_vocabulary: Optional[str] = None,
         # Recordings
         recordings_mic_device: Optional[str] = None,
         recordings_loopback_device: Optional[str] = None,
@@ -196,6 +204,8 @@ class SettingsService:
             self.db.set_setting("prepend_space", "true" if prepend_space else "false")
         if paste_with_shift is not None:
             self.db.set_setting("paste_with_shift", "true" if paste_with_shift else "false")
+        if custom_vocabulary is not None:
+            self.db.set_setting("custom_vocabulary", custom_vocabulary)
         # Hotkey settings - normalize before storing for consistent format
         if hold_hotkey is not None:
             self.db.set_setting("hold_hotkey", normalize_hotkey(hold_hotkey))

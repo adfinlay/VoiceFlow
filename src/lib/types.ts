@@ -25,6 +25,10 @@ export interface Settings {
   // Paste with Ctrl+Shift+V instead of Ctrl+V. For terminals that bind
   // Ctrl+V to other things (gnome-terminal, alacritty, kitty, etc.).
   pasteWithShift: boolean;
+  // Comma-separated list of proper nouns / project jargon that Whisper
+  // should prefer when decoding (passed to faster-whisper's `hotwords`).
+  // Empty disables the bias.
+  customVocabulary: string;
   // Recordings (Meetings) — backend-persisted toggles for the long-form flow.
   recordingsAutoRenameTitle?: boolean;
 }

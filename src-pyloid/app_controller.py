@@ -350,6 +350,7 @@ class AppController:
                 text = self.transcription_service.transcribe(
                     audio,
                     language=settings.language,
+                    hotwords=settings.custom_vocabulary,
                 )
 
                 info(f"Transcription result: '{text}'")
@@ -437,6 +438,7 @@ class AppController:
             "useEvdevHotkeys": settings.use_evdev_hotkeys,
             "prependSpace": settings.prepend_space,
             "pasteWithShift": settings.paste_with_shift,
+            "customVocabulary": settings.custom_vocabulary,
             "recordingsAutoRenameTitle": settings.recordings_auto_rename_title,
         }
 
@@ -456,6 +458,8 @@ class AppController:
             mapped["prepend_space"] = kwargs["prependSpace"]
         if "pasteWithShift" in kwargs:
             mapped["paste_with_shift"] = kwargs["pasteWithShift"]
+        if "customVocabulary" in kwargs:
+            mapped["custom_vocabulary"] = kwargs["customVocabulary"]
         if "recordingsAutoRenameTitle" in kwargs:
             mapped["recordings_auto_rename_title"] = kwargs["recordingsAutoRenameTitle"]
         # Hotkey settings (camelCase to snake_case)
@@ -666,6 +670,7 @@ class AppController:
             text = self.transcription_service.transcribe(
                 audio,
                 language=settings.language,
+                hotwords=settings.custom_vocabulary,
             )
             info(f"Test transcription: '{text}'")
             return {"success": True, "transcript": text or ""}

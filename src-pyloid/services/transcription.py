@@ -119,8 +119,15 @@ class TranscriptionService:
         self,
         audio: np.ndarray,
         language: str = "auto",
+        hotwords: Optional[str] = None,
     ) -> str:
-        """Transcribe audio to text."""
+        """Transcribe audio to text.
+
+        hotwords: optional vocabulary hint passed to faster-whisper's
+        `hotwords` argument. Used to boost proper nouns / project jargon
+        ("Puttshack", "kp.kdbx", etc.) at decode time. Empty / None
+        disables the bias.
+        """
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
@@ -138,20 +145,25 @@ class TranscriptionService:
 
         # Transcribe
         language_arg = None if language == "auto" else language
+        hotwords_arg = hotwords.strip() if hotwords else None
+        if hotwords_arg == "":
+            hotwords_arg = None
 
         log.debug("Audio stats", length=len(audio), max_amplitude=float(np.abs(audio).max()), mean_amplitude=float(np.abs(audio).mean()))
 
+        common_kwargs = dict(
+            language=language_arg,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters=dict(
+                min_silence_duration_ms=500,  # Less aggressive silence detection
+                speech_pad_ms=400,  # More padding around speech
+            ),
+            hotwords=hotwords_arg,
+        )
+
         try:
-            segments, info = self._model.transcribe(
-                audio,
-                language=language_arg,
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters=dict(
-                    min_silence_duration_ms=500,  # Less aggressive silence detection
-                    speech_pad_ms=400,  # More padding around speech
-                ),
-            )
+            segments, info = self._model.transcribe(audio, **common_kwargs)
         except RuntimeError as e:
             if "not found or cannot be loaded" in str(e) and self._current_device == "cuda":
                 log.warning("CUDA runtime error during transcription, reloading on CPU", error=str(e))
@@ -161,16 +173,7 @@ class TranscriptionService:
                 self._current_device = "cpu"
                 self._current_compute_type = "int8"
                 log.info("Model reloaded on CPU fallback")
-                segments, info = self._model.transcribe(
-                    audio,
-                    language=language_arg,
-                    beam_size=5,
-                    vad_filter=True,
-                    vad_parameters=dict(
-                        min_silence_duration_ms=500,
-                        speech_pad_ms=400,
-                    ),
-                )
+                segments, info = self._model.transcribe(audio, **common_kwargs)
             else:
                 raise
 
