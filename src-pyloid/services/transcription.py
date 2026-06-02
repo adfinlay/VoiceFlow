@@ -177,11 +177,14 @@ class TranscriptionService:
             else:
                 raise
 
-        # Combine all segments
+        # Combine all segments. Whisper tokenises with a leading-space
+        # prefix on most tokens, so segment.text usually starts with " ".
+        # Joining those with another " " produces double spaces between
+        # segments on long dictations — strip each segment first.
         segments_list = list(segments)
         log.debug("Transcription segments", segment_count=len(segments_list))
-        text_parts = [segment.text for segment in segments_list]
-        text = " ".join(text_parts).strip()
+        text_parts = [s.text.strip() for s in segments_list if s.text and s.text.strip()]
+        text = " ".join(text_parts)
 
         return text
 
