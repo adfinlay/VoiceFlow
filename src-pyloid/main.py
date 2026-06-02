@@ -393,6 +393,26 @@ def stop_active_meeting():
         log.info("tray: stop meeting no-op", error=str(exc))
 
 
+def quit_application():
+    """Quit cleanly on the first tray click.
+
+    Pyloid.quit() (the QObject wrapper) routes through execute_command,
+    which runs the inner _Pyloid.quit() inside a nested QEventLoop.exec().
+    The QApplication.quit() that _Pyloid.quit() ends with only signals the
+    *current* event loop — i.e. that nested loop — so the outer main loop
+    keeps spinning after the call returns: popup closes, dashboard hides,
+    but the process and tray survive. A second click eventually shakes
+    the outer loop loose, hence the user-visible "two clicks to fully
+    exit" behaviour.
+
+    Tray-menu callbacks run on the main thread inside the outer event
+    loop, so calling QApplication.quit() directly from here signals the
+    correct loop on the first try. aboutToQuit then fires, controller.
+    shutdown runs, app.run() returns, the process exits."""
+    log.info("tray: quit requested")
+    QApplication.instance().quit()
+
+
 # Tray setup
 app.set_tray_actions({
     TrayEvent.DoubleClick: show_dashboard,
@@ -402,7 +422,7 @@ app.set_tray_menu_items([
     {"label": "Open Dashboard", "callback": show_dashboard},
     {"label": "Stop active recording", "callback": stop_active_meeting},
     {"label": "Settings", "callback": open_settings},
-    {"label": "Quit", "callback": app.quit},
+    {"label": "Quit", "callback": quit_application},
 ])
 
 
